@@ -36,6 +36,13 @@
 %% fields, as text, from the \score, \bookpart, \book and top-level \header
 %% blocks (an inner field hides an outer one).
 %%
+%% Each staff announces itself once (kind "staff": its name, the context it
+%% is in, e.g. a PianoStaff, and its instrument name). "timing" records
+%% \cadenzaOn/Off (on: false/true).
+%%
+%% A note inside a chord carries its own tie ("tie": true) and fingerings
+%% ("fingers"), which LilyPond doesn't broadcast as events.
+%%
 %% Pitches are spelled: step (0 = C ... 6 = B), alter (in whole tones, so
 %% 1/2 is a sharp), octave (0 is the octave from middle C up).
 %% Durations: log (0 = whole, 2 = quarter, ...), dots, factor (tuplets,
@@ -163,12 +170,26 @@ mark, such as a \"Ped.\" drawn as text rather than with \\sustainOn."
    (make-engraver
     (listeners
      ((note-event engraver event)
-      (let ((ctx (ly:translator-context engraver))
-            (pitch (ly:event-property event 'pitch #f)))
+      ;; The tie and fingerings of a note inside a chord (<c~ e-3>), which
+      ;; LilyPond doesn't broadcast (a lone note's arrive as events instead).
+      (let* ((ctx (ly:translator-context engraver))
+             (pitch (ly:event-property event 'pitch #f))
+             (articulations (ly:event-property event 'articulations '()))
+             (tied (any (lambda (a) (memq 'tie-event (ly:event-property a 'class)))
+                        articulations))
+             (fingers (filter-map
+                       (lambda (a)
+                         (and (memq 'fingering-event (ly:event-property a 'class))
+                              (json-number (ly:event-property a 'digit 0))))
+                       articulations)))
         (apply emit ctx event "note"
                (append
                 (if pitch (list "pitch" (json-pitch pitch)) '())
-                (list "duration" (json-duration (ly:event-property event 'duration)))))))
+                (list "duration" (json-duration (ly:event-property event 'duration)))
+                (if tied (list "tie" "true") '())
+                (if (pair? fingers)
+                    (list "fingers" (string-append "[" (string-join fingers ",") "]"))
+                    '())))))
      ((rest-event engraver event)
       (emit (ly:translator-context engraver) event "rest"
             "duration" (json-duration (ly:event-property event 'duration))))
@@ -190,6 +211,9 @@ mark, such as a \"Ped.\" drawn as text rather than with \\sustainOn."
      ((articulation-event engraver event)
       (emit (ly:translator-context engraver) event "articulation"
             "type" (json-symbol (ly:event-property event 'articulation-type))))
+     ((fingering-event engraver event)
+      (emit (ly:translator-context engraver) event "fingering"
+            "digit" (json-number (ly:event-property event 'digit 0))))
      ((arpeggio-event engraver event)
       (emit (ly:translator-context engraver) event "arpeggio"))
      ((tremolo-event engraver event)
@@ -219,9 +243,19 @@ mark, such as a \"Ped.\" drawn as text rather than with \\sustainOn."
 %% Staves: the context properties that change what the notes mean.
 
 #(define (lilyport-staff-engraver context)
-   (let ((clef #f) (key #f))
+   (let ((clef #f) (key #f) (announced #f))
      (make-engraver
       ((process-music engraver)
+       ;; Which staves make one instrument (a PianoStaff's) and its name.
+       (if (not announced)
+           (let ((parent (ly:context-parent context))
+                 (instrument (ly:context-property context 'instrumentName #f)))
+             (set! announced #t)
+             (apply emit context #f "staff"
+                    "name" (json-string (ly:context-id context))
+                    "parent" (json-symbol (ly:context-name parent))
+                    "parent_id" (json-number (lilyport-context-id parent))
+                    (if instrument (list "instrument" (json-markup instrument)) '()))))
        (let ((glyph (ly:context-property context 'clefGlyph #f))
              (position (ly:context-property context 'clefPosition 0))
              (transposition (ly:context-property context 'clefTransposition 0))
@@ -320,7 +354,7 @@ an inner field hiding an outer one; markups as their text."
 %% The score: time, tempo, bar lines and repeats, and the header.
 
 #(define (lilyport-score-engraver context)
-   (let ((time #f) (bar-type #f) (scopes #f))
+   (let ((time #f) (bar-type #f) (scopes #f) (timing #t))
      (make-engraver
       ((initialize engraver)
        (set! lilyport-score-number (1+ lilyport-score-number))
@@ -338,11 +372,21 @@ an inner field hiding an outer one; markups as their text."
                            (and (not (ly:version? >= '(2 25 0)))
                                 (ly:context-property context 'timeSignatureFraction #f))))
              (which (ly:context-property context 'whichBar #f))
-             (repeats (ly:context-property context 'repeatCommands '())))
+             (repeats (ly:context-property context 'repeatCommands '()))
+             (now-timing (ly:context-property context 'timing #t)))
+         ;; Off in a cadenza (\cadenzaOn), where the bar position stays put.
+         (if (not (eq? timing now-timing))
+             (begin
+               (set! timing now-timing)
+               (emit context #f "timing" "on" (if now-timing "true" "false"))))
          (if (and fraction (not (equal? time fraction)))
              (begin
                (set! time fraction)
-               (emit context #f "time" "fraction" (json-fraction fraction))))
+               ;; style C draws 4/4 and 2/2 as C and cut C
+               (emit context #f "time" "fraction" (json-fraction fraction)
+                     "style" (json-symbol
+                              (assq-ref (ly:context-grob-definition context 'TimeSignature)
+                                        'style)))))
          (if (and (string? which) (not (string-null? which)))
              (emit context #f "bar-line" "type" (json-string which)))
          (if (pair? repeats)

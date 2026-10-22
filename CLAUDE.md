@@ -16,6 +16,7 @@ consumer), the verification plan, what Mutopia sources taught, and the
 ```sh
 tools/fetch-lilypond.sh [version]   # official LilyPond release into .tools/ (default 2.26.0)
 tools/fetch-corpus.sh               # Mutopia test pieces into .corpus/mutopia/ (+ convert-ly)
+python3 -m lilyport convert PIECE.ly -o PIECE.mxl   # or .musicxml
 python3 -m lilyport dump PIECE.ly [-o EVENTS.jsonl]
 python3 -m venv .venv && .venv/bin/pip install -e '.[test]' && .venv/bin/pytest
 ```
@@ -31,8 +32,9 @@ system or base conda Python: use `.venv/`.
 - `lilyport/frontend/compat.ly` — redefinitions of Scheme functions old sources
   call that `convert-ly` doesn't rewrite; grows with the corpus.
 - `lilyport/frontend/lilypond.py` — finding and running LilyPond.
-- `lilyport/model/` — the format-neutral event model (to write).
-- `lilyport/writers/` — one module per output format (MusicXML first, to write).
+- `lilyport/model/` — the format-neutral score model (`score.py`) and its
+  assembly from the events (`assemble.py`).
+- `lilyport/writers/` — one module per output format (`musicxml.py` first).
 - `tests/` — fixtures (small hand-written `.ly`, one feature each) and pytest.
 
 ## Conventions
@@ -59,6 +61,10 @@ system or base conda Python: use `.venv/`.
 - `ly:book-scores` and `ly:book-book-parts` list newest first. A score's
   output definitions tell `\midi` from `\layout` by `output-def-kind`
   (`is-layout` is unset in a plain `\layout { }`).
+- A note inside a chord keeps its own `~` and fingering in its
+  `articulations` (not broadcast); a lone note's are broadcast as events.
+- In a cadenza `measurePosition` stays 0 (the listener records `timing`), and
+  the bar after it keeps the cadenza's bar number.
 - LilyPond 2.25+ deprecates `timeSignatureFraction` for `timeSignature`.
 - Mutopia sources are old (2.10–2.12): run `convert-ly`, then expect removed
   Scheme functions (add them to `compat.ly`) and marks drawn as text markup

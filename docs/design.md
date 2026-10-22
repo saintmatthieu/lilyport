@@ -329,13 +329,26 @@ lilyport/
 ## Status
 
 - **Done:** the listener (`lilyport dump PIECE.ly` writes the event stream),
-  `compat.ly`, tests on a fixture; both Mutopia pieces (`tools/fetch-corpus.sh`
-  puts them in `.corpus/mutopia/`, git-ignored, as published and after
-  `convert-ly`) dump completely on LilyPond 2.26.0. Each score's merged
-  `\header` is a `header` record (Moonlight's licence is in
-  `mutopiacopyright`, the Nocturne's in `copyright`; the Mutopia id ends
-  `footer`, e.g. `Mutopia-2007/02/11-276`).
-- **Next:** the event model and the MusicXML writer (milestone 2); the
-  verification.
-- **Open:** repeat structure (`repeatCommands` is recorded; check voltas);
-  scores without `\layout`; lyrics and chord names (out of scope for now).
+  `compat.ly`; both Mutopia pieces (`tools/fetch-corpus.sh` puts them in
+  `.corpus/mutopia/`, git-ignored, as published and after `convert-ly`) dump
+  completely on LilyPond 2.26.0. Each score's merged `\header` is a `header`
+  record (Moonlight's licence is in `mutopiacopyright`, the Nocturne's in
+  `copyright`; the Mutopia id ends `footer`, e.g. `Mutopia-2007/02/11-276`).
+- **Done:** the score model and the MusicXML writer (`lilyport convert
+  PIECE.ly -o PIECE.mxl`): parts from PianoStaff grouping, voices numbered
+  per home staff (cross-staff notes keep their voice), chords, ties (per note
+  in chords), tuplets, grace notes, pickups, cadenzas, multi-measure rests,
+  key/time/clef changes, slurs, articulations and ornaments, fingerings
+  (Moonlight's text "4 - 5" as a substitution), dynamics, hairpins, pedals,
+  text, tempo, final bar lines; metadata into `<work>`, `<identification>`
+  (rights = licence — maintainer, source = Mutopia page URL). On both pieces
+  music21's reading of the output matches LilyPond's dump note for note
+  (onset, spelled pitch, length, staff).
+- **Next:** the verification harness (XSD, Verovio MIDI against LilyPond's
+  MIDI, music21 structured diff) as tests; open Moonlight in Orchestrion's
+  Debug build; then milestone 3 (the Nocturne's text-drawn pedals and
+  ornaments, `\cresc` as words + dashes).
+- **Open:** repeat structure (`repeatCommands` is recorded, not written);
+  beams and accidentals are left to the importer; scores without `\layout`;
+  lyrics and chord names (out of scope for now). Moonlight's source says
+  `\key e \major` (written as such: C♯ minor isn't declared).
