@@ -244,6 +244,8 @@ with \\sustainOn, or a turn with the accidentals of its notes."
             "dir" (event-direction event)))
      ((slur-event engraver event)
       (emit (ly:translator-context engraver) event "slur" "dir" (event-direction event)))
+     ((trill-span-event engraver event)
+      (emit (ly:translator-context engraver) event "trill-span" "dir" (event-direction event)))
      ((phrasing-slur-event engraver event)
       (emit (ly:translator-context engraver) event "phrasing-slur" "dir" (event-direction event)))
      ((articulation-event engraver event)

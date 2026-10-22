@@ -226,9 +226,9 @@ class _Builder:
             self.warn(f"bar {e['bar']}: a {e['kind']} on no note (a skip?): dropped")
         return chord
 
-    def _slur_chord(self, e):
-        """The note a slur starts or ends on; on a skip, the voice's next note
-        (start) or previous one (end), as LilyPond draws it."""
+    def _span_chord(self, e):
+        """The note a slur (or trill line) starts or ends on; on a skip, the
+        voice's next note (start) or previous one (end), as LilyPond draws it."""
         time = _time(e)
         chord = self.chords.get((e["voice"], time))
         if chord is None:
@@ -303,7 +303,7 @@ class _Builder:
             (e for e in self.events if e["kind"] in ("slur", "phrasing-slur")),
             key=lambda e: (_time(e), e["dir"] != 1, e["voice"]))
         for e in slur_events:
-            chord = self._slur_chord(e)
+            chord = self._span_chord(e)
             if chord is None:
                 continue
             if e["dir"] == -1:
@@ -325,6 +325,15 @@ class _Builder:
                 chord = self._chord_at(e)
                 if chord:
                     chord.fingerings.append(str(e["digit"]))
+            elif kind == "trill-span":
+                # \startTrillSpan: "tr" and a wavy line, to \stopTrillSpan
+                # (often on the first grace note of the trill's resolution).
+                chord = self._span_chord(e)
+                if chord and e["dir"] == -1:
+                    chord.marks.append("trill")
+                    chord.trill_line.append("start")
+                elif chord:
+                    chord.trill_line.append("stop")
             elif kind == "arpeggio":
                 chord = self._chord_at(e)
                 if chord:

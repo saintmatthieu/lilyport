@@ -330,10 +330,12 @@ class _PartWriter:
                 group, tag, *attributes = MARKS[mark]
                 parent = notations if group is None else group_element(group)
                 ET.SubElement(parent, tag, **(attributes[0] if attributes else {}))
-                if group == "ornaments":
-                    for placement, alter in chord.ornament_alters.items():
-                        _text(parent, "accidental-mark", ACCIDENTALS[alter],
-                              placement=placement)
+            for kind in chord.trill_line:
+                ET.SubElement(group_element("ornaments"), "wavy-line", type=kind, number="1")
+            # After all the ornaments (MusicXML's order).
+            for placement, alter in chord.ornament_alters.items():
+                _text(group_element("ornaments"), "accidental-mark", ACCIDENTALS[alter],
+                      placement=placement)
         fingerings = (chord.fingerings if first else []) + (note.fingerings if note else [])
         if fingerings:
             technical = group_element("technical")

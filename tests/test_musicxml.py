@@ -100,7 +100,7 @@ def test_markings():
     assert root.findtext("work/work-title") == "Markings"
     assert root.findtext("identification/creator[@type='composer']") == "Nobody"
     assert root.findtext("identification/rights") == "Public Domain"
-    first, second, third, fourth = measures(root)
+    first, second, third, fourth, fifth = measures(root)
     assert first.find("direction/direction-type/dynamics/p") is not None
     slurs = [s.get("type") for s in first.iter("slur")]
     assert slurs == ["start", "stop"]
@@ -117,6 +117,11 @@ def test_markings():
     assert [p.get("type") for p in fourth.iter("pedal")] == ["start", "stop"]
     assert fourth.findtext("direction/direction-type/words") == "dolce"
     assert fourth.find("note/notations/ornaments/trill-mark") is not None
+    # \startTrillSpan: "tr" and a wavy line, to the resolution's first grace note.
+    trill, grace = notes(fifth)[:2]
+    assert [c.tag for c in trill.find("notations/ornaments")] == ["trill-mark", "wavy-line"]
+    assert grace.find("grace") is not None
+    assert grace.find("notations/ornaments/wavy-line").get("type") == "stop"
 
 
 def test_mxl(tmp_path):
