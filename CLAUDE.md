@@ -55,6 +55,10 @@ system or base conda Python: use `.venv/`.
   score with a `\layout` (a `\midi`-only score produces no events).
 - The listener writes to `$LILYPORT_EVENTS` (environment), not via `-e` Scheme
   definitions (which depend on the module LilyPond evaluates them in).
+- `-dinclude-settings` files are read last-given first (an include stack).
+- `ly:book-scores` and `ly:book-book-parts` list newest first. A score's
+  output definitions tell `\midi` from `\layout` by `output-def-kind`
+  (`is-layout` is unset in a plain `\layout { }`).
 - LilyPond 2.25+ deprecates `timeSignatureFraction` for `timeSignature`.
 - Mutopia sources are old (2.10–2.12): run `convert-ly`, then expect removed
   Scheme functions (add them to `compat.ly`) and marks drawn as text markup

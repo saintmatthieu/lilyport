@@ -32,6 +32,10 @@
 %%   kind   what happened; the other fields depend on it
 %%   src    [line, column] in the source, when the event has an origin
 %%
+%% Each engraved score has one header record (kind "header", at time 0): its
+%% fields, as text, from the \score, \bookpart, \book and top-level \header
+%% blocks (an inner field hides an outer one).
+%%
 %% Pitches are spelled: step (0 = C ... 6 = B), alter (in whole tones, so
 %% 1/2 is a sharp), octave (0 is the octave from middle C up).
 %% Durations: log (0 = whole, 2 = quarter, ...), dots, factor (tuplets,
@@ -247,14 +251,88 @@ mark, such as a \"Ped.\" drawn as text rather than with \\sustainOn."
                        ",")
                       "]")))))))))
 
+%% The header. Engravers can't see it, so the book handler (which LilyPond
+%% calls for each book, before translating its scores) queues the header
+%% scopes of each score that will be engraved, innermost first; each Score
+%% engraver takes the next. Scores without a \layout get no engraver, so they
+%% get no place in the queue either.
+
+#(define lilyport-pending-headers '())
+
+#(define (lilyport-engraved-score? score)
+   ;; A score without output definitions gets the default \layout. (Before
+   ;; output-def-kind, if older LilyPonds lack it, every score counts.)
+   (let ((defs (ly:score-output-defs score)))
+     (or (null? defs)
+         (any (lambda (def) (not (eq? (ly:output-def-lookup def 'output-def-kind #f) 'midi)))
+              defs))))
+
+#(define (lilyport-queue-headers book outer)
+   (let ((scopes (if (module? (ly:book-header book))
+                     (cons (ly:book-header book) outer)
+                     outer)))
+     ;; LilyPond keeps parts and scores newest first.
+     (for-each (lambda (part) (lilyport-queue-headers part scopes))
+               (reverse (ly:book-book-parts book)))
+     (for-each
+      (lambda (score)
+        (if (lilyport-engraved-score? score)
+            (set! lilyport-pending-headers
+                  (append lilyport-pending-headers
+                          (list (if (module? (ly:score-header score))
+                                    (cons (ly:score-header score) scopes)
+                                    scopes))))))
+      (reverse (ly:book-scores book)))))
+
+#(define (lilyport-wrap-book-handler handler)
+   (lambda (book . rest)
+     (lilyport-queue-headers book '())
+     (apply handler book rest)))
+
+#(set! toplevel-book-handler (lilyport-wrap-book-handler toplevel-book-handler))
+#(if (defined? 'default-toplevel-book-handler)
+     (set! default-toplevel-book-handler
+           (lilyport-wrap-book-handler default-toplevel-book-handler)))
+
+#(define (json-header scopes)
+   "The fields of SCOPES (header modules, innermost first) as a JSON object,
+an inner field hiding an outer one; markups as their text."
+   (let ((fields (make-hash-table)))
+     (for-each
+      (lambda (scope)
+        (module-for-each
+         (lambda (name variable)
+           (if (not (hashq-ref fields name))
+               (hashq-set! fields name (variable-ref variable))))
+         scope))
+      scopes)
+     (string-append
+      "{"
+      (string-join
+       (map (lambda (entry)
+              (string-append (json-symbol (car entry)) ":" (json-markup (cdr entry))))
+            (sort (hash-map->list cons fields)
+                  (lambda (a b) (string<? (symbol->string (car a))
+                                          (symbol->string (car b))))))
+       ",")
+      "}")))
+
 %% The score: time, tempo, bar lines and repeats, and the header.
 
 #(define (lilyport-score-engraver context)
-   (let ((time #f) (bar-type #f))
+   (let ((time #f) (bar-type #f) (scopes #f))
      (make-engraver
       ((initialize engraver)
-       (set! lilyport-score-number (1+ lilyport-score-number)))
+       (set! lilyport-score-number (1+ lilyport-score-number))
+       (if (pair? lilyport-pending-headers)
+           (begin
+             (set! scopes (car lilyport-pending-headers))
+             (set! lilyport-pending-headers (cdr lilyport-pending-headers)))))
       ((process-music engraver)
+       (if scopes
+           (begin
+             (emit context #f "header" "fields" (json-header scopes))
+             (set! scopes #f)))
        ;; timeSignature since 2.25 (timeSignatureFraction before, deprecated)
        (let ((fraction (or (ly:context-property context 'timeSignature #f)
                            (and (not (ly:version? >= '(2 25 0)))

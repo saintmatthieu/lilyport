@@ -51,3 +51,16 @@ def test_score_and_staff_settings(two_bars):
     assert kinds.count("time") == 1 and kinds.count("clef") == 2 and kinds.count("key") == 2
     time = next(e for e in two_bars if e["kind"] == "time")
     assert time["fraction"] == [3, 4]
+
+
+def test_header_per_engraved_score():
+    events = dump_events(FIXTURES / "headers.ly")
+    headers = {e["score"]: e["fields"] for e in events if e["kind"] == "header"}
+    # The MIDI-only score is not engraved: no events, no header.
+    assert sorted(headers) == [1, 2, 3, 4]
+    # A score's field hides the book's, which hides the top level's; markups as text.
+    assert headers[1] == {"title": "Book title", "piece": "First",
+                          "composer": "A. Composer", "copyright": "Public Domain"}
+    assert headers[2]["title"] == "Second" and "piece" not in headers[2]
+    # Book parts, in source order.
+    assert [headers[3]["title"], headers[4]["title"]] == ["Part 1", "Part 2"]

@@ -331,8 +331,11 @@ lilyport/
 - **Done:** the listener (`lilyport dump PIECE.ly` writes the event stream),
   `compat.ly`, tests on a fixture; both Mutopia pieces (`tools/fetch-corpus.sh`
   puts them in `.corpus/mutopia/`, git-ignored, as published and after
-  `convert-ly`) dump completely on LilyPond 2.26.0.
-- **Next:** the score's `\header` (title, composer, licence) into the stream;
-  the event model and the MusicXML writer (milestone 2); the verification.
+  `convert-ly`) dump completely on LilyPond 2.26.0. Each score's merged
+  `\header` is a `header` record (Moonlight's licence is in
+  `mutopiacopyright`, the Nocturne's in `copyright`; the Mutopia id ends
+  `footer`, e.g. `Mutopia-2007/02/11-276`).
+- **Next:** the event model and the MusicXML writer (milestone 2); the
+  verification.
 - **Open:** repeat structure (`repeatCommands` is recorded; check voltas);
   scores without `\layout`; lyrics and chord names (out of scope for now).
