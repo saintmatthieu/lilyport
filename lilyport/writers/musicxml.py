@@ -22,6 +22,7 @@ TYPES = {-2: "long", -1: "breve", 0: "whole", 1: "half", 2: "quarter", 3: "eight
 DYNAMICS = {"p", "pp", "ppp", "pppp", "ppppp", "pppppp", "f", "ff", "fff", "ffff", "fffff",
             "ffffff", "mp", "mf", "sf", "sfp", "sfpp", "fp", "rf", "rfz", "sfz", "sffz", "fz",
             "n", "pf", "sfzp"}
+ACCIDENTALS = {-2: "flat-flat", -1: "flat", 0: "natural", 1: "sharp", 2: "double-sharp"}
 BAR_STYLES = {"|.": "light-heavy", "||": "light-light", ".|": "heavy-light", ".": "heavy",
               "..": "heavy-heavy", ";": "dotted", "!": "dashed", "'": "tick"}
 # LilyPond's articulation names -> (MusicXML notations group, element[, attributes]).
@@ -196,7 +197,9 @@ class _PartWriter:
             if cursor != start:
                 self.move(element, cursor, start)
                 cursor = start
-            for item in sorted(items, key=lambda i: (i.time, isinstance(i, Chord))):
+            # At one time: pedal releases, then other directions, then notes.
+            for item in sorted(items, key=lambda i: (i.time, isinstance(i, Chord),
+                                                     getattr(i, "type", "") != "stop")):
                 if item.time[0] != cursor:
                     self.move(element, cursor, item.time[0])
                     cursor = item.time[0]
@@ -327,6 +330,10 @@ class _PartWriter:
                 group, tag, *attributes = MARKS[mark]
                 parent = notations if group is None else group_element(group)
                 ET.SubElement(parent, tag, **(attributes[0] if attributes else {}))
+                if group == "ornaments":
+                    for placement, alter in chord.ornament_alters.items():
+                        _text(parent, "accidental-mark", ACCIDENTALS[alter],
+                              placement=placement)
         fingerings = (chord.fingerings if first else []) + (note.fingerings if note else [])
         if fingerings:
             technical = group_element("technical")

@@ -123,17 +123,45 @@
 #(define (json-markup m)
    (json-string
     (cond ((string? m) m)
-          ((markup? m) (markup->string m))
+          ((markup? m) (markup->string (lilyport-note-text m)))
           (else (format #f "~a" m)))))
 
+#(define lilyport-accidental-markups
+   `((,flat-markup . "accidentals.flat") (,sharp-markup . "accidentals.sharp")
+     (,natural-markup . "accidentals.natural") (,doubleflat-markup . "accidentals.flatflat")
+     (,doublesharp-markup . "accidentals.doublesharp")))
+
 #(define (markup-glyphs m)
-   "The music glyphs a markup draws (\\musicglyph): text that stands for a
-mark, such as a \"Ped.\" drawn as text rather than with \\sustainOn."
+   "The music glyphs a markup draws (\\musicglyph, \\flat...), in order:
+text that stands for a mark, such as a \"Ped.\" drawn as text rather than
+with \\sustainOn, or a turn with the accidentals of its notes."
    (cond
     ((and (pair? m) (eq? (car m) musicglyph-markup) (pair? (cdr m)) (string? (cadr m)))
      (list (cadr m)))
+    ((and (pair? m) (assq (car m) lilyport-accidental-markups))
+     (list (cdr (assq (car m) lilyport-accidental-markups))))
     ((pair? m) (append-map markup-glyphs m))
     (else '())))
+
+#(define lilyport-note-symbols #("𝅝" "𝅗𝅥" "♩" "♪" "𝅘𝅥𝅯" "𝅘𝅥𝅰"))
+
+#(define (lilyport-note-text m)
+   "M with its \\note markups as note symbols, which markup->string drops."
+   (define (symbol log dots)
+     (string-append (if (and (>= log 0) (< log (vector-length lilyport-note-symbols)))
+                        (vector-ref lilyport-note-symbols log)
+                        "♩")
+                    (make-string dots #\.)))
+   (cond
+    ((and (pair? m) (eq? (car m) note-markup) (pair? (cdr m)))
+     (let ((duration (cadr m)))
+       (if (ly:duration? duration)
+           (symbol (ly:duration-log duration) (ly:duration-dot-count duration))
+           "♩")))
+    ((and (pair? m) (eq? (car m) note-by-number-markup) (pair? (cdr m)))
+     (symbol (cadr m) (caddr m)))
+    ((pair? m) (cons (lilyport-note-text (car m)) (lilyport-note-text (cdr m))))
+    (else m)))
 
 #(define (json-glyphs m)
    (string-append "[" (string-join (map json-string (markup-glyphs m)) ",") "]"))
@@ -401,6 +429,13 @@ an inner field hiding an outer one; markups as their text."
        ",")
       "}")))
 
+#(define (lilyport-hidden? context grob)
+   "Whether the context's settings hide GROB (\\omit, \\hide, transparent)."
+   (let ((definition (ly:context-grob-definition context grob)))
+     (or (eq? (assq-ref definition 'transparent) #t)
+         (let ((stencil (assq 'stencil definition)))
+           (and stencil (not (cdr stencil)))))))
+
 %% The score: time, tempo, bar lines and repeats, and the header.
 
 #(define (lilyport-score-engraver context)
@@ -453,6 +488,8 @@ an inner field hiding an outer one; markups as their text."
               (text (ly:event-property event 'text #f)))
           (apply emit context event "tempo"
                  (append
+                  ;; Hidden (Mutopia's Nocturne writes its own as text).
+                  (if (lilyport-hidden? context 'MetronomeMark) (list "visible" "false") '())
                   (if text (list "text" (json-markup text)) '())
                   (if unit (list "unit" (json-duration unit)) '())
                   (if (number? count) (list "count" (json-number count)) '())))))))))

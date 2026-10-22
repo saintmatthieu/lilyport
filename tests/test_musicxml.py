@@ -178,3 +178,24 @@ def test_tempo_option(tmp_path):
     heading = ET.parse(out).getroot().find("part/measure/direction")
     assert heading.findtext("direction-type/words") == "Adagio sostenuto"
     assert heading.find("sound").get("tempo") == "60"
+
+
+def test_text_marks():
+    root = convert(FIXTURES / "text-marks.ly")
+    check_timing(root)
+    first, second = measures(root)
+    # The hidden 8 = 132 only sets the playback tempo (in quarters).
+    assert first.find("direction/direction-type/metronome") is None
+    assert first.find("sound").get("tempo") == "66"
+    # Ped. on C, * on E, Ped. on F; Ped. again on G: released first.
+    pedals = [(m.get("number"), p.get("type")) for m in (first, second)
+              for p in m.iter("pedal")]
+    assert pedals == [("1", "start"), ("1", "stop"), ("1", "start"),
+                      ("2", "stop"), ("2", "start"), ("2", "stop")]
+    # The turn on D, its upper note flat, its lower natural; no text left.
+    d = notes(first)[1]
+    assert d.find("notations/ornaments/turn") is not None
+    alters = {a.get("placement"): a.text for a in d.iter("accidental-mark")}
+    assert alters == {"above": "flat", "below": "natural"}
+    assert root.find(".//words") is None
+    assert notes(first)[2].findtext("notations/technical/fingering") == "54"

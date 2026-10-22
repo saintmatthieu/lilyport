@@ -54,6 +54,8 @@ class Chord:
     arpeggio: bool = False
     stem: str | None = None  # "up"/"down" as the source sets it, None if automatic
     beam: str | None = None  # "begin"/"continue"/"end" in one of LilyPond's beams
+    # Accidentals on an ornament's notes: {"above": -1} is a flat above a turn.
+    ornament_alters: dict[str, int] = field(default_factory=dict)
 
     @property
     def grace(self) -> bool:

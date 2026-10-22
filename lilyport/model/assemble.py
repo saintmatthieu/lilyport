@@ -15,8 +15,17 @@ CLEF_SIGNS = {"clefs.G": "G", "clefs.F": "F", "clefs.C": "C",
               "clefs.percussion": "percussion", "clefs.tab": "TAB"}
 # Bar types that are just a bar line.
 PLAIN_BARS = {"", "|"}
+# Marks drawn as text (Mutopia's Nocturne): their glyphs, as LilyPond's
+# articulation names.
+GLYPH_MARKS = {"scripts.turn": "turn", "scripts.reverseturn": "reverseturn",
+               "scripts.trill": "trill", "scripts.mordent": "mordent",
+               "scripts.prall": "prall", "scripts.prallprall": "prallprall",
+               "scripts.ufermata": "fermata", "scripts.dfermata": "fermata"}
+GLYPH_ALTERS = {"accidentals.flat": -1, "accidentals.sharp": 1, "accidentals.natural": 0,
+                "accidentals.flatflat": -2, "accidentals.doublesharp": 2}
+GLYPH_PEDALS = {"pedal.Ped": "start", "pedal.*": "stop"}
 # "4 - 5": a finger substitution written as text (Mutopia's Moonlight).
-FINGERING_TEXT = re.compile(r"^\s*\d(\s*-\s*\d)*\s*$")
+FINGERING_TEXT = re.compile(r"^[\d\s-]*\d[\d\s-]*$")
 MUTOPIA_FOOTER = re.compile(r"Mutopia-\d{4}/\d{1,2}/\d{1,2}-(\d+)")
 # LilyPond's tempo notation: 4=54, 4.=60, 2=30.
 TEMPO = re.compile(r"^\s*(\d+)(\.*)\s*=\s*(\d+(?:\.\d+)?)\s*$")
@@ -50,6 +59,14 @@ def set_starting_tempo(score, quarters):
         start = Direction((Fraction(0), Fraction(0)), 1, 0, "tempo", placement="above")
         first.directions.append(start)
     start.sound_tempo = quarters
+
+
+def _text_fingerings(text):
+    """Fingerings written as text: "4 - 5" a substitution, "5 2" two
+    fingerings, "54" as printed."""
+    if "-" in text:
+        return ["-".join(re.findall(r"\d", text))]
+    return text.split()
 
 
 def _time(e):
@@ -99,6 +116,7 @@ class _Builder:
         self._tuplets()
         self._beams()
         self._marks()
+        self._pedals()
         self._staff_settings()
         self._time_signatures()
         self._measures()
@@ -308,13 +326,15 @@ class _Builder:
                 chord = self._chord_at(e)
                 if chord:
                     chord.arpeggio = True
+            elif kind == "text" and e.get("glyphs"):
+                self._glyph_text(e)
             elif kind == "text":
                 if FINGERING_TEXT.match(e["text"]):
                     chord = self._chord_at(e)
                     if chord:
-                        chord.fingerings.append("-".join(re.findall(r"\d", e["text"])))
+                        chord.fingerings += _text_fingerings(e["text"])
                 else:
-                    self._direction(e, "words", text=e["text"],
+                    self._direction(e, "words", text=" ".join(e["text"].split()),
                                     placement={1: "above", -1: "below"}.get(e["dir"]))
             elif kind == "dynamic":
                 self._direction(e, "dynamic", text=e["text"])
@@ -327,13 +347,61 @@ class _Builder:
             elif kind == "tempo":
                 unit = _duration(e["unit"]) if "unit" in e else None
                 count = Fraction(e["count"]).limit_denominator(1000) if "count" in e else None
-                self._direction(e, "tempo", text=e.get("text", ""), placement="above",
-                                tempo_unit=unit, tempo_count=count,
-                                sound_tempo=count * unit.length * 4 if unit and count else None)
+                sound = count * unit.length * 4 if unit and count else None
+                if e.get("visible", True):
+                    self._direction(e, "tempo", text=e.get("text", ""), placement="above",
+                                    tempo_unit=unit, tempo_count=count, sound_tempo=sound)
+                else:  # hidden: only its playback
+                    self._direction(e, "tempo", sound_tempo=sound)
             elif kind in ("una-corda", "tremolo", "breathe", "glissando", "repeat-commands",
                           "skip"):
                 if kind != "skip":
                     self.unhandled[kind] += 1
+
+    def _pedals(self):
+        """A press while the pedal is down is a re-pedalling ("Ped. Ped."): a
+        release first, which importers need to pair them."""
+        for part in self.parts:
+            down = set()
+            for pedal in sorted((d for d in part.directions if d.kind == "pedal"),
+                                key=lambda d: (d.time, d.type != "stop")):
+                if pedal.type == "start" and pedal.staff in down:
+                    part.directions.append(Direction(pedal.time, pedal.staff, 0, "pedal",
+                                                     type="stop"))
+                elif pedal.type == "stop" and pedal.staff not in down:
+                    self.warn(f"a pedal released at {pedal.time[0]} that wasn't down: dropped")
+                    part.directions.remove(pedal)
+                    continue
+                if pedal.type == "start":
+                    down.add(pedal.staff)
+                else:
+                    down.discard(pedal.staff)
+
+    def _glyph_text(self, e):
+        """Text drawing marks: pedals, ornaments (with the accidentals stacked
+        above and below them); what is left of the text, if any words."""
+        glyphs = e["glyphs"]
+        for glyph in glyphs:
+            if glyph in GLYPH_PEDALS:
+                self._direction(e, "pedal", type=GLYPH_PEDALS[glyph])
+        for index, glyph in enumerate(glyphs):
+            if glyph in GLYPH_MARKS:
+                chord = self._chord_at(e)
+                if chord is None:
+                    continue
+                chord.marks.append(GLYPH_MARKS[glyph])
+                before, after = glyphs[index - 1] if index else None, \
+                    glyphs[index + 1] if index + 1 < len(glyphs) else None
+                if before in GLYPH_ALTERS:
+                    chord.ornament_alters["above"] = GLYPH_ALTERS[before]
+                if after in GLYPH_ALTERS:
+                    chord.ornament_alters["below"] = GLYPH_ALTERS[after]
+        # The rest: the glyph names gone, words if any (not the digits
+        # fingering an ornament's notes, nor a "Ped."'s full stop).
+        words = [w for w in e["text"].split() if w not in glyphs]
+        if any(c.isalpha() for w in words for c in w):
+            self._direction(e, "words", text=" ".join(words),
+                            placement={1: "above", -1: "below"}.get(e["dir"]))
 
     def _direction(self, e, kind, **fields):
         if e["staff"] in self.place:
@@ -341,7 +409,9 @@ class _Builder:
         else:  # a score-wide event (tempo): the first staff
             part, staff = self.parts[0], 1
         voice = 0
-        if e["voice"] in self.voice and self.voice[e["voice"]][0] is part:
+        # Pedals belong to the staff: written in one pass, in time order, as
+        # MuseScore pairs them in file order.
+        if kind != "pedal" and e["voice"] in self.voice and self.voice[e["voice"]][0] is part:
             voice = self.voice[e["voice"]][1]
         part.directions.append(Direction(_time(e), staff, voice, kind, **fields))
 

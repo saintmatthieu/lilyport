@@ -356,10 +356,17 @@ lilyport/
   (rights = licence — maintainer, source = Mutopia page URL). On both pieces
   music21's reading of the output matches LilyPond's dump note for note
   (onset, spelled pitch, length, staff).
+- **Done:** marks drawn as text (the Nocturne): `pedal.Ped`/`pedal.*`
+  glyphs as pedals (a press while down is written release + press, as
+  importers pair them in file order; each staff's pedals in one pass),
+  `scripts.turn`/`trill`... as ornaments with the accidentals stacked above
+  and below (`<accidental-mark>`), digit texts as fingerings; hidden
+  metronome marks (`MetronomeMark.transparent`, `\omit`) as playback only;
+  `\note` in markups as note symbols.
 - **Next:** the verification harness (XSD, Verovio MIDI against LilyPond's
-  MIDI, music21 structured diff) as tests; open Moonlight in Orchestrion's
-  Debug build; then milestone 3 (the Nocturne's text-drawn pedals and
-  ornaments, `\cresc` as words + dashes).
+  MIDI, music21 structured diff) as tests; check both pieces in Orchestrion's
+  Debug build; `\cresc` as words + dashes; dynamics in markups
+  (`\markup \dynamic pp`) are written as words.
 - **Open:** repeat structure (`repeatCommands` is recorded, not written);
   accidentals are left to the importer; scores without `\layout`;
   lyrics and chord names (out of scope for now). Moonlight's source says
