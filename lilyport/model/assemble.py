@@ -69,6 +69,7 @@ class _Builder:
 
     def build(self):
         self._parts()
+        self.metadata = self._metadata()
         self._voices()
         self._chords()
         self._ties()
@@ -80,9 +81,10 @@ class _Builder:
         self._measures()
         self._measure_rests()
         self._bar_lines()
+        self._starting_tempo()
         for kind, count in sorted(self.unhandled.items()):
             self.warn(f"{count} {kind} event(s) not written yet")
-        return Score(self._metadata(), self.measures, self.time_signatures, self.parts,
+        return Score(self.metadata, self.measures, self.time_signatures, self.parts,
                      self.warnings)
 
     # Parts and staves: a PianoStaff's staves are one part, any other staff its own.
@@ -300,10 +302,11 @@ class _Builder:
             elif kind == "sustain":
                 self._direction(e, "pedal", type="stop" if e["dir"] == 1 else "start")
             elif kind == "tempo":
+                unit = _duration(e["unit"]) if "unit" in e else None
+                count = Fraction(e["count"]).limit_denominator(1000) if "count" in e else None
                 self._direction(e, "tempo", text=e.get("text", ""), placement="above",
-                                tempo_unit=_duration(e["unit"]) if "unit" in e else None,
-                                tempo_count=Fraction(e["count"]).limit_denominator(1000)
-                                if "count" in e else None)
+                                tempo_unit=unit, tempo_count=count,
+                                sound_tempo=count * unit.length * 4 if unit and count else None)
             elif kind in ("una-corda", "tremolo", "breathe", "glissando", "repeat-commands",
                           "skip"):
                 if kind != "skip":
@@ -438,6 +441,21 @@ class _Builder:
                 ends[at].right_bar = e["type"]
             elif at != 0:
                 self.warn(f"bar {e['bar']}: a {e['type']!r} bar line inside a bar: dropped")
+
+    def _starting_tempo(self):
+        """Without a tempo mark at the start: the heading LilyPond prints above
+        the first system (the header's piece, e.g. "Adagio sostenuto"), at the
+        tempo LilyPond's MIDI plays (not an importer's default)."""
+        first = self.parts[0]
+        if any(d.kind == "tempo" and d.time[0] == 0 for d in first.directions):
+            return
+        playback = next((e for e in self.events if e["kind"] == "playback"), None)
+        sound = Fraction(playback["wholes_per_minute"]).limit_denominator(1000) * 4 \
+            if playback else None
+        if self.metadata.piece or sound:
+            first.directions.append(Direction((Fraction(0), Fraction(0)), 1, 0, "tempo",
+                                              text=self.metadata.piece or "",
+                                              placement="above", sound_tempo=sound))
 
     def _metadata(self):
         fields = next((e["fields"] for e in self.events if e["kind"] == "header"), {})

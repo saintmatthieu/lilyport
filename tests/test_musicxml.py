@@ -152,3 +152,15 @@ def test_voice_one_is_voice_one():
     high, low = sorted(notes(measures(root)[1]), key=lambda n: -int(n.findtext("pitch/octave")))
     assert (high.findtext("voice"), high.findtext("stem")) == ("1", "up")
     assert (low.findtext("voice"), low.findtext("stem")) == ("2", "down")
+
+
+def test_starting_tempo():
+    events = dump_events(FIXTURES / "tempo.ly")
+    heading = musicxml.to_element(assemble(events, 1)).find("part/measure/direction")
+    assert heading.findtext("direction-type/words") == "Adagio sostenuto"
+    assert heading.find("sound").get("tempo") == "54"
+    marks = musicxml.to_element(assemble(events, 2)).findall("part/measure/direction")
+    assert len(marks) == 1
+    assert marks[0].findtext("direction-type/words") == "Allegro"
+    assert marks[0].findtext("direction-type/metronome/per-minute") == "132"
+    assert marks[0].find("sound").get("tempo") == "132"

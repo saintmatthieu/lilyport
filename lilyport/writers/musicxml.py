@@ -341,6 +341,11 @@ class _PartWriter:
             xml.append(notations)
 
     def direction(self, element, direction):
+        if direction.kind == "tempo" and not direction.text and not direction.tempo_count:
+            # Only a playback tempo: no mark to show.
+            if direction.sound_tempo:
+                ET.SubElement(element, "sound", tempo=_number(direction.sound_tempo))
+            return
         placement = direction.placement or ("below" if direction.kind in ("dynamic", "wedge",
                                                                           "pedal") else "above")
         xml = ET.SubElement(element, "direction", placement=placement)
@@ -359,7 +364,7 @@ class _PartWriter:
             ET.SubElement(kind_element, "pedal", type=direction.type, line="no", sign="yes")
         elif direction.kind == "tempo":
             if direction.text:
-                _text(kind_element, "words", direction.text)
+                _text(kind_element, "words", direction.text, **{"font-weight": "bold"})
             if direction.tempo_unit and direction.tempo_count:
                 if direction.text:
                     kind_element = ET.SubElement(xml, "direction-type")
@@ -372,9 +377,8 @@ class _PartWriter:
             _text(xml, "voice", direction.voice)
         if self.part.staves > 1:
             _text(xml, "staff", direction.staff)
-        if direction.kind == "tempo" and direction.tempo_unit and direction.tempo_count:
-            quarters = direction.tempo_count * direction.tempo_unit.length * 4
-            ET.SubElement(xml, "sound", tempo=_number(quarters))
+        if direction.sound_tempo:
+            ET.SubElement(xml, "sound", tempo=_number(direction.sound_tempo))
 
 
 def _number(value):

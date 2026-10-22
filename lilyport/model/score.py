@@ -72,6 +72,7 @@ class Direction:
     placement: str | None = None  # "above"/"below"
     tempo_unit: Duration | None = None
     tempo_count: Fraction | None = None
+    sound_tempo: Fraction | None = None  # playback, in quarter notes per minute
 
 
 @dataclass

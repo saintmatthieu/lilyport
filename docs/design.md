@@ -347,7 +347,10 @@ lilyport/
   in chords), tuplets, grace notes, pickups, cadenzas, multi-measure rests,
   key/time/clef changes, slurs, articulations and ornaments, fingerings
   (Moonlight's text "4 - 5" as a substitution), dynamics, hairpins, pedals,
-  text, tempo, final bar lines; metadata into `<work>`, `<identification>`
+  text, tempo (without a `\tempo` at the start: the header's `piece`, which
+  LilyPond prints above the first system, as tempo words, and a `<sound>`
+  at the tempo LilyPond's MIDI plays, from the score's `\midi` or the
+  default 4 = 60 — importers otherwise play at 120), final bar lines; metadata into `<work>`, `<identification>`
   (rights = licence — maintainer, source = Mutopia page URL). On both pieces
   music21's reading of the output matches LilyPond's dump note for note
   (onset, spelled pitch, length, staff).

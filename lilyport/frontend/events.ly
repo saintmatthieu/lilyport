@@ -36,6 +36,8 @@
 %% fields, as text, from the \score, \bookpart, \book and top-level \header
 %% blocks (an inner field hides an outer one).
 %%
+%% "playback" gives the tempo LilyPond's MIDI starts at (wholes_per_minute).
+%%
 %% Each staff announces itself once (kind "staff": its name, the context it
 %% is in, e.g. a PianoStaff, and its instrument name). "timing" records
 %% \cadenzaOn/Off (on: false/true).
@@ -319,8 +321,8 @@ mark, such as a \"Ped.\" drawn as text rather than with \\sustainOn."
 
 %% The header. Engravers can't see it, so the book handler (which LilyPond
 %% calls for each book, before translating its scores) queues the header
-%% scopes of each score that will be engraved, innermost first; each Score
-%% engraver takes the next. Scores without a \layout get no engraver, so they
+%% scopes of each score that will be engraved, innermost first, with the
+%% tempo its MIDI starts at; each Score engraver takes the next. Scores without a \layout get no engraver, so they
 %% get no place in the queue either.
 
 #(define lilyport-pending-headers '())
@@ -345,10 +347,26 @@ mark, such as a \"Ped.\" drawn as text rather than with \\sustainOn."
         (if (lilyport-engraved-score? score)
             (set! lilyport-pending-headers
                   (append lilyport-pending-headers
-                          (list (if (module? (ly:score-header score))
-                                    (cons (ly:score-header score) scopes)
-                                    scopes))))))
+                          (list (cons (if (module? (ly:score-header score))
+                                          (cons (ly:score-header score) scopes)
+                                          scopes)
+                                      (lilyport-midi-tempo score)))))))
       (reverse (ly:book-scores book)))))
+
+#(define (lilyport-midi-tempo score)
+   "The tempo (wholes per minute) LilyPond's MIDI of SCORE starts at: its
+\\midi block's, else the default \\midi's (4 = 60)."
+   (let* ((midis (filter (lambda (def) (eq? (ly:output-def-lookup def 'output-def-kind #f) 'midi))
+                         (ly:score-output-defs score)))
+          (midi (if (pair? midis) (car midis) (ly:parser-lookup '$defaultmidi)))
+          (score-def (and (ly:output-def? midi) (ly:output-def-lookup midi 'Score #f)))
+          ;; Newest first: \midi { \tempo ... } before the default.
+          (op (and score-def
+                   (find (lambda (op) (and (eq? (car op) 'assign)
+                                           (eq? (cadr op) 'tempoWholesPerMinute)))
+                         (ly:context-def-lookup score-def 'property-ops '()))))
+          (tempo (and op (caddr op))))
+     (if (ly:moment? tempo) (ly:moment-main tempo) tempo)))
 
 #(define (lilyport-wrap-book-handler handler)
    (lambda (book . rest)
@@ -386,18 +404,21 @@ an inner field hiding an outer one; markups as their text."
 %% The score: time, tempo, bar lines and repeats, and the header.
 
 #(define (lilyport-score-engraver context)
-   (let ((time #f) (bar-type #f) (scopes #f) (timing #t))
+   (let ((time #f) (bar-type #f) (scopes #f) (midi-tempo #f) (timing #t))
      (make-engraver
       ((initialize engraver)
        (set! lilyport-score-number (1+ lilyport-score-number))
        (if (pair? lilyport-pending-headers)
            (begin
-             (set! scopes (car lilyport-pending-headers))
+             (set! scopes (caar lilyport-pending-headers))
+             (set! midi-tempo (cdar lilyport-pending-headers))
              (set! lilyport-pending-headers (cdr lilyport-pending-headers)))))
       ((process-music engraver)
        (if scopes
            (begin
              (emit context #f "header" "fields" (json-header scopes))
+             (if midi-tempo
+                 (emit context #f "playback" "wholes_per_minute" (json-number midi-tempo)))
              (set! scopes #f)))
        ;; timeSignature since 2.25 (timeSignatureFraction before, deprecated)
        (let ((fraction (or (ly:context-property context 'timeSignature #f)
