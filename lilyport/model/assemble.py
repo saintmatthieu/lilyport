@@ -73,6 +73,7 @@ class _Builder:
         self._chords()
         self._ties()
         self._tuplets()
+        self._beams()
         self._marks()
         self._staff_settings()
         self._time_signatures()
@@ -232,6 +233,19 @@ class _Builder:
                 if inside:
                     inside[0].tuplet_starts += 1
                     inside[-1].tuplet_stops += 1
+
+    def _beams(self):
+        for e in self.events:
+            if e["kind"] != "beam":
+                continue
+            times = [(Fraction(t[0], t[1]), Fraction(t[2], t[3])) for t in e["stems"]]
+            chords = [self.chords.get((e["voice"], time)) for time in sorted(times)]
+            if None in chords or len(chords) < 2:
+                self.warn(f"bar {e['bar']}: a beam over stems with no notes: dropped")
+                continue
+            for chord in chords:
+                chord.beam = "continue"
+            chords[0].beam, chords[-1].beam = "begin", "end"
 
     # What is attached to notes, and directions.
 

@@ -71,6 +71,10 @@ def test_two_bars():
     assert triplet[-1].find("notations/tuplet").get("type") == "stop"
     grace = [n for n in notes(second) if n.find("grace") is not None]
     assert len(grace) == 1 and grace[0].find("duration") is None
+    # LilyPond's beams: the four eighths of bar 1, the triplet.
+    assert [n.findtext("beam") for n in notes(first) if n.findtext("type") == "eighth"] \
+        == ["begin", "continue", "continue", "end"]
+    assert [n.findtext("beam") for n in triplet] == ["begin", "continue", "end"]
     # The tie runs across the bar line.
     assert second.find("note/tie[@type='start']") is not None
     assert third.find("note/tie[@type='stop']") is not None
@@ -134,6 +138,13 @@ def test_mutopia(piece):
     check_timing(root)
     pitches = sum(1 for e in events if e["kind"] == "note")
     assert len(root.findall("part/measure/note/pitch")) == pitches
+    if piece == "moonlight1-a4":
+        # Its 2.10 beam settings (compat.ly): the triplets beamed in threes,
+        # stems up while the melody is silent (bars 1-4).
+        bar = root.find("part/measure[@number='1']")
+        triplets = [n for n in notes(bar) if n.findtext("staff") == "1"]
+        assert [n.findtext("beam") for n in triplets[:3]] == ["begin", "continue", "end"]
+        assert {n.findtext("stem") for n in triplets} == {"up"}
 
 
 def test_voice_one_is_voice_one():

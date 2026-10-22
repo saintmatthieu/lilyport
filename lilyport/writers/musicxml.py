@@ -295,6 +295,9 @@ class _PartWriter:
             _text(xml, "stem", chord.stem)
         if self.part.staves > 1:
             _text(xml, "staff", chord.staff)
+        if chord.beam and note is not None:
+            # The primary beam: importers draw the secondary ones from the durations.
+            _text(xml, "beam", chord.beam, number="1")
         self.notations(xml, chord, note, first=index == 0)
 
     def notations(self, xml, chord, note, first):

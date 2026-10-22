@@ -53,6 +53,7 @@ class Chord:
     fingerings: list[str] = field(default_factory=list)  # "4", or "4-5" for a substitution
     arpeggio: bool = False
     stem: str | None = None  # "up"/"down" as the source sets it, None if automatic
+    beam: str | None = None  # "begin"/"continue"/"end" in one of LilyPond's beams
 
     @property
     def grace(self) -> bool:

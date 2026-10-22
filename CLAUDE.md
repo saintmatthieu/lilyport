@@ -65,6 +65,9 @@ system or base conda Python: use `.venv/`.
   `articulations` (not broadcast); a lone note's are broadcast as events.
 - In a cadenza `measurePosition` stays 0 (the listener records `timing`), and
   the bar after it keeps the cadenza's bar number.
+- MuseScore's importer ignores `<stem>` on notes it beams itself: write
+  LilyPond's beams. In 2.25+ `measureLength` and `beatBase` (was
+  `baseMoment`) are numbers, not moments.
 - LilyPond 2.25+ deprecates `timeSignatureFraction` for `timeSignature`.
 - Mutopia sources are old (2.10–2.12): run `convert-ly`, then expect removed
   Scheme functions (add them to `compat.ly`) and marks drawn as text markup

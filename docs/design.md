@@ -108,8 +108,12 @@ https://github.com/uliska/ly2xml , https://github.com/lasconic/lilypond_export
   MusicXML `<voice>` numbers and `<staff>` per note, `<backup>`/`<forward>`.
 - **Ties across bar lines** come from LilyPond already split per notated note, which
   helps; check that `~` across `\bar` survives.
-- **Beaming** is computed at engraving time; MuseScore re-beams on import anyway, so
-  emitting no `<beam>` is acceptable at first.
+- **Beaming** is computed at engraving time; the listener collects each
+  beam's stems when its voice ends, and the writer writes them. They are
+  needed: MuseScore gives a beamed note its beam's direction, and beams it
+  makes itself get the voice's default (down in voice 2), whatever `<stem>`
+  says (`handleBeamAndStemDir` in its importer). Old sources' beam settings
+  must be translated for it (`compat.ly`).
 - **Partial first measure** (`\partial`) → MusicXML implicit measure / measure number 0.
 - **Chord names, lyrics, figured bass**: out of scope at first (Orchestrion ignores them).
 
@@ -239,7 +243,8 @@ out.
 
 - **`convert-ly` is not enough.** Old sources (2.10, 2.12) call Scheme
   functions removed since, which it doesn't rewrite: `set-octavation`
-  (now `\ottava`), `override-auto-beam-setting`. `frontend/compat.ly`
+  (now `\ottava`), `override-auto-beam-setting` (its `'end` settings
+  become `beatBase`/`beatStructure`: the beams are exported). `frontend/compat.ly`
   redefines them in today's terms; add to it as the corpus requires.
 - **Marks drawn as text.** The Nocturne (#1590) draws its pedal marks as
   `\markup` glyphs (`pedal.Ped`, `pedal.*`: 73 and 72 of them), a turn and a
@@ -337,7 +342,8 @@ lilyport/
 - **Done:** the score model and the MusicXML writer (`lilyport convert
   PIECE.ly -o PIECE.mxl`): parts from PianoStaff grouping, voices numbered
   per home staff (cross-staff notes keep their voice; stems-up voices take
-  the lower numbers), stem directions the source sets, chords, ties (per note
+  the lower numbers), stem directions the source sets, LilyPond's beams,
+  chords, ties (per note
   in chords), tuplets, grace notes, pickups, cadenzas, multi-measure rests,
   key/time/clef changes, slurs, articulations and ornaments, fingerings
   (Moonlight's text "4 - 5" as a substitution), dynamics, hairpins, pedals,
@@ -350,6 +356,6 @@ lilyport/
   Debug build; then milestone 3 (the Nocturne's text-drawn pedals and
   ornaments, `\cresc` as words + dashes).
 - **Open:** repeat structure (`repeatCommands` is recorded, not written);
-  beams and accidentals are left to the importer; scores without `\layout`;
+  accidentals are left to the importer; scores without `\layout`;
   lyrics and chord names (out of scope for now). Moonlight's source says
   `\key e \major` (written as such: C♯ minor isn't declared).

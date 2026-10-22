@@ -248,6 +248,30 @@ mark, such as a \"Ped.\" drawn as text rather than with \\sustainOn."
      ((glissando-event engraver event)
       (emit (ly:translator-context engraver) event "glissando")))))
 
+%% Beams, as LilyPond made them (by hand or automatically): one record per
+%% beam when its voice ends, with the times of its stems. Importers that get
+%% no beams make their own, with stems in their default directions.
+
+#(define (lilyport-beam-engraver context)
+   (let ((beams '()))
+     (make-engraver
+      (acknowledgers
+       ((beam-interface engraver grob source-engraver)
+        (set! beams (cons grob beams))))
+      ((finalize engraver)
+       (for-each
+        (lambda (beam)
+          (let ((stems (ly:grob-array->list (ly:grob-object beam 'stems))))
+            (if (pair? stems)
+                (emit context #f "beam"
+                      "stems" (string-append
+                               "["
+                               (string-join (map (lambda (stem) (json-moment (grob::when stem)))
+                                                 stems)
+                                            ",")
+                               "]")))))
+        (reverse beams))))))
+
 %% Staves: the context properties that change what the notes mean.
 
 #(define (lilyport-staff-engraver context)
@@ -413,7 +437,8 @@ an inner field hiding an outer one; markups as their text."
                   (if (number? count) (list "count" (json-number count)) '())))))))))
 
 \layout {
-  \context { \Voice \consists #lilyport-voice-engraver }
+  \context { \Voice \consists #lilyport-voice-engraver
+                     \consists #lilyport-beam-engraver }
   \context { \DrumVoice \consists #lilyport-voice-engraver }
   \context { \Staff \consists #lilyport-staff-engraver }
   \context { \Score \consists #lilyport-score-engraver }

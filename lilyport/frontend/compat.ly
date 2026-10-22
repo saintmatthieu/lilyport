@@ -26,9 +26,35 @@
 #(define-public (set-octavation octave)
    (make-music 'OttavaEvent 'ottava-number octave))
 
-%% Before beamExceptions (2.12 and earlier): #(override-auto-beam-setting ...),
-%% #(revert-auto-beam-setting ...). Beaming isn't exported: nothing.
-#(define-public (override-auto-beam-setting . args)
-   (make-music 'SequentialMusic 'elements '()))
+%% Before beamExceptions (2.12 and earlier): #(override-auto-beam-setting
+%% '(end * * * *) N D [context]) ended automatic beams at N/D in the bar;
+%% several calls add up. In today's terms: beats of the largest length that
+%% divides every end and the bar (exact when the ends are evenly spaced, as in
+%% '(end ...) 1 4, 2 4, 3 4). Settings other than 'end, and the beam and time
+%% signature filters (the *s), are not translated.
+#(define lilyport-beam-ends (make-weak-key-hash-table))
+#(define (lilyport-rational-gcd a b)
+   (/ (gcd (* (numerator a) (denominator b)) (* (numerator b) (denominator a)))
+      (* (denominator a) (denominator b))))
+#(define-public (override-auto-beam-setting setting num den . rest)
+   (if (eq? (car setting) 'end)
+       (context-spec-music
+        (make-apply-context
+         (lambda (context)
+           ;; Lengths are moments before 2.25 (baseMoment), numbers since (beatBase).
+           (let* ((ends (cons (/ num den) (hashq-ref lilyport-beam-ends context '())))
+                  (length (ly:context-property context 'measureLength 1))
+                  (moments? (ly:moment? length))
+                  (measure (if moments? (ly:moment-main length) length))
+                  (beat (fold lilyport-rational-gcd measure ends)))
+             (hashq-set! lilyport-beam-ends context ends)
+             (if moments?
+                 (ly:context-set-property! context 'baseMoment (ly:make-moment beat))
+                 (ly:context-set-property! context 'beatBase beat))
+             (ly:context-set-property! context 'beatStructure
+                                       (make-list (inexact->exact (/ measure beat)) 1))
+             (ly:context-set-property! context 'beamExceptions '()))))
+        (if (pair? rest) (car rest) 'Voice))
+       (make-music 'SequentialMusic 'elements '())))
 #(define-public (revert-auto-beam-setting . args)
    (make-music 'SequentialMusic 'elements '()))
