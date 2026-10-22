@@ -154,6 +154,54 @@ controller. What matters, roughly by importance:
    Map these from the `.ly` `\header` (`title`, `composer`, `copyright`/`license`,
    `mutopia*` fields).
 
+## Writing MusicXML that MuseScore imports right
+
+Orchestrion reads MusicXML through MuseScore's importer (its fork,
+`~/github/saintmatthieu/Orchestrion/MuseScore`,
+`src/importexport/musicxml/internal/import/importmusicxmlpass2.cpp`). Learnt
+the hard way on 2026-10-21, curating PDMX scores (user uploads from
+musescore.com) — the writer must:
+
+- **Write no invisible notes.** The importer brings `print-object="no"` notes
+  back as real notes: Orchestrion then makes the player play them. (PDMX
+  transcribers wrote turns and trills out invisibly for MuseScore's playback
+  on top of the ornament mark: they had to be played twice.) Same for tempo:
+  write the tempo markings the score shows, not playback rubato.
+- **Write each staff's pedal marks in time order.** The importer pairs pedal
+  starts and stops in *file* order and ignores their `number`; a start that
+  comes (in the file) before the previous pedal's stop is dropped, and the
+  stops then close the wrong pedals. Write a staff's pedals from one voice's
+  pass through the measure, or with `<offset>`, in time order (a release
+  before a press at the same instant).
+- **Ornaments as marks, notes as notes.** A turn/trill/mordent is an
+  `<ornaments>` mark on its note; Orchestrion plays it. Write grace notes as
+  `<grace/>` notes before their main note.
+- **Mind text inference.** Orchestrion turns on the importer's "infer text
+  type": `<words>` like "cresc."/"dim." become crescendo/diminuendo lines
+  running to the next dynamic (within 24 quarters, on the same staff), "p"/"f"
+  in words become dynamics, tempo words become tempo marks. A "cresc." with
+  `<dashes>` in the same `<direction>` becomes one dashed line with the dashes'
+  extent (fork fix, 2026-10-21). So a LilyPond `\cresc` text span should be
+  written as words + dashes; a hairpin as a `<wedge>`.
+- **Expect Debug builds to abort** on the importer's failed assertions
+  (`IF_ASSERT_FAILED` calls `assert()`); Release builds only log them, and
+  import the score wrong. Orchestrion's score shelf loads every score it lists
+  to draw its card, so one bad file crashes the shelf. The final check of a
+  file for Orchestrion is opening it in a Debug build and grepping the log for
+  `ASSERT FAILED` (the Orchestrion repo's memory notes how to do it headless:
+  one launch per file, startup score set in the ini — quoted if the path has a
+  comma).
+
+### Checking the Nocturne
+
+Two places to check against the source edition (Schirmer 1881, see Mutopia's
+PDF of #1590) once it converts:
+
+- Bar 13 (counting the pickup as bar 1; bar 12 numbered from 0) and its
+  repeat at bar 21: the third left-hand chord. The two musescore.com
+  transcriptions Orchestrion had disagree — C4–E♭4–F4 against C4–E♭4–G4.
+- The turns (bars 3 and 27, 1-based): a mark on the note, not written out too.
+
 ## Verification (the main value of the project)
 
 The check needs a reader of our MusicXML that **we didn't write**: if our own code read
@@ -281,8 +329,9 @@ lilyport/
 ## Status
 
 - **Done:** the listener (`lilyport dump PIECE.ly` writes the event stream),
-  `compat.ly`, tests on a fixture; both Mutopia pieces (fetched into `.corpus/`,
-  git-ignored, after `convert-ly`) dump completely.
+  `compat.ly`, tests on a fixture; both Mutopia pieces (`tools/fetch-corpus.sh`
+  puts them in `.corpus/mutopia/`, git-ignored, as published and after
+  `convert-ly`) dump completely on LilyPond 2.26.0.
 - **Next:** the score's `\header` (title, composer, licence) into the stream;
   the event model and the MusicXML writer (milestone 2); the verification.
 - **Open:** repeat structure (`repeatCommands` is recorded; check voltas);
