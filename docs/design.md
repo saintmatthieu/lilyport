@@ -365,6 +365,13 @@ lilyport/
   and below (`<accidental-mark>`), digit texts as fingerings; hidden
   metronome marks (`MetronomeMark.transparent`, `\omit`) as playback only;
   `\note` in markups as note symbols.
+- **Done:** `Dynamics` lines (`\new Dynamics` between or under the staves:
+  their marks go to the staff above them, placed between the staves).
+  Second source for the Nocturne: Knute Snortum's IMSLP engraving of the
+  three Op. 9 Nocturnes (LilyPond 2.22, CC BY-SA 4.0, after the OCVE
+  facsimile of a first edition; `.corpus/imslp/snortum-op9/`, downloaded by
+  hand: IMSLP answers scripts with a captcha). No. 2 is its `--score 2`;
+  its notes match LilyPond's, its pedals and hairpins are native.
 - **Next:** the verification harness (XSD, Verovio MIDI against LilyPond's
   MIDI, music21 structured diff) as tests; check both pieces in Orchestrion's
   Debug build; `\cresc` as words + dashes; dynamics in markups

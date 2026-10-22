@@ -39,7 +39,9 @@
 %% "playback" gives the tempo LilyPond's MIDI starts at (wholes_per_minute).
 %%
 %% Each staff announces itself once (kind "staff": its name, the context it
-%% is in, e.g. a PianoStaff, and its instrument name). "timing" records
+%% is in, e.g. a PianoStaff, its order of creation, and its instrument name),
+%% and so does each Dynamics line ("dynamics": true), whose events carry its
+%% id as their staff. "timing" records
 %% \cadenzaOn/Off (on: false/true).
 %%
 %% A note's "stem" is the direction its context sets (1 up, -1 down), absent
@@ -182,7 +184,9 @@ with \\sustainOn, or a turn with the accidentals of its notes."
              (ly:context-property ctx 'currentBarNumber 0)
              (json-moment (ly:context-property ctx 'measurePosition (ly:make-moment 0)))
              lilyport-score-number
-             (lilyport-context-id (ly:context-find ctx 'Staff))
+             ;; a Dynamics line between staves stands for a staff
+             (lilyport-context-id (or (ly:context-find ctx 'Staff)
+                                      (ly:context-find ctx 'Dynamics)))
              (lilyport-context-id (ly:context-find ctx 'Voice))
              (json-string kind))
      (if location
@@ -310,20 +314,50 @@ with \\sustainOn, or a turn with the accidentals of its notes."
 
 %% Staves: the context properties that change what the notes mean.
 
-#(define (lilyport-staff-engraver context)
-   (let ((clef #f) (key #f) (announced #f))
+#(define lilyport-context-order 0)
+
+#(define (lilyport-next-order)
+   (set! lilyport-context-order (1+ lilyport-context-order))
+   lilyport-context-order)
+
+#(define (lilyport-announce context order)
+   "Which staves make one instrument (a PianoStaff's), in which order (the
+Dynamics lines between them too, which belong to a staff), and its name."
+   (let ((parent (ly:context-parent context))
+         (instrument (ly:context-property context 'instrumentName #f)))
+     (apply emit context #f "staff"
+            "name" (json-string (ly:context-id context))
+            "parent" (json-symbol (ly:context-name parent))
+            "parent_id" (json-number (lilyport-context-id parent))
+            "order" (json-number order)
+            (append
+             (if (eq? (ly:context-name context) 'Dynamics) (list "dynamics" "true") '())
+             (if instrument (list "instrument" (json-markup instrument)) '())))))
+
+%% A Dynamics line (\new Dynamics, between or under staves): its dynamics,
+%% hairpins and pedals go to the voice engraver; it announces itself.
+
+#(define (lilyport-dynamics-engraver context)
+   (let ((order #f) (announced #f))
      (make-engraver
+      ((initialize engraver)
+       (set! order (lilyport-next-order)))
       ((process-music engraver)
-       ;; Which staves make one instrument (a PianoStaff's) and its name.
        (if (not announced)
-           (let ((parent (ly:context-parent context))
-                 (instrument (ly:context-property context 'instrumentName #f)))
+           (begin
              (set! announced #t)
-             (apply emit context #f "staff"
-                    "name" (json-string (ly:context-id context))
-                    "parent" (json-symbol (ly:context-name parent))
-                    "parent_id" (json-number (lilyport-context-id parent))
-                    (if instrument (list "instrument" (json-markup instrument)) '()))))
+             (lilyport-announce context order)))))))
+
+#(define (lilyport-staff-engraver context)
+   (let ((clef #f) (key #f) (order #f) (announced #f))
+     (make-engraver
+      ((initialize engraver)
+       (set! order (lilyport-next-order)))
+      ((process-music engraver)
+       (if (not announced)
+           (begin
+             (set! announced #t)
+             (lilyport-announce context order)))
        (let ((glyph (ly:context-property context 'clefGlyph #f))
              (position (ly:context-property context 'clefPosition 0))
              (transposition (ly:context-property context 'clefTransposition 0))
@@ -505,5 +539,7 @@ an inner field hiding an outer one; markups as their text."
                      \consists #lilyport-beam-engraver }
   \context { \DrumVoice \consists #lilyport-voice-engraver }
   \context { \Staff \consists #lilyport-staff-engraver }
+  \context { \Dynamics \consists #lilyport-voice-engraver
+                        \consists #lilyport-dynamics-engraver }
   \context { \Score \consists #lilyport-score-engraver }
 }

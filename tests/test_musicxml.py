@@ -228,3 +228,14 @@ def test_slurs_pair_in_file_order():
     # The upper staff's C to F, and the lower staff's four pairs per bar.
     assert ("C", "F") in pairs and len(pairs) == 5
     assert pairs.count(("C", "D")) == 1 and pairs.count(("B", "C")) == 1
+
+
+def test_dynamics_lines():
+    root = convert(FIXTURES / "dynamics-lines.ly")
+    check_timing(root)
+    assert root.findtext("part/measure/attributes/staves") == "2"
+    marks = [(next(iter(d.find("direction-type"))).tag, d.findtext("staff"), d.get("placement"))
+             for d in root.iter("direction")]
+    assert ("dynamics", "1", "below") in marks and ("wedge", "1", "below") in marks
+    assert ("words", "1", "below") in marks  # ^"cresc." in the line between the staves
+    assert [m for m in marks if m[0] == "pedal"] == [("pedal", "2", "below")] * 2

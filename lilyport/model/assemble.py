@@ -135,8 +135,9 @@ class _Builder:
 
     def _parts(self):
         groups = {}  # group key -> [(staff id, staff record)]
-        for e in self.events:
-            if e["kind"] == "staff":
+        records = [e for e in self.events if e["kind"] == "staff"]
+        for e in records:
+            if not e.get("dynamics"):
                 key = e["parent_id"] if e["parent"] in INSTRUMENT_GROUPS else ("staff", e["staff"])
                 groups.setdefault(key, []).append(e)
         self.parts = []
@@ -147,6 +148,20 @@ class _Builder:
             self.parts.append(part)
             for number, staff in enumerate(staves, 1):
                 self.place[staff["staff"]] = (part, number)
+        # A Dynamics line belongs to the staff above it (below the first
+        # staff if none is), among its group's staves.
+        self.placement = {}  # Dynamics id -> where its marks go: "below"/"above"
+        staves = [e for e in records if not e.get("dynamics")]
+        for line in (e for e in records if e.get("dynamics")):
+            siblings = [s for s in staves if s["parent_id"] == line["parent_id"]] or staves
+            above = [s for s in siblings if s.get("order", 0) < line.get("order", 0)]
+            if above:
+                staff, self.placement[line["staff"]] = above[-1], "below"
+            elif siblings:
+                staff, self.placement[line["staff"]] = siblings[0], "above"
+            else:
+                continue
+            self.place[line["staff"]] = self.place[staff["staff"]]
 
     # Voices: LilyPond's voice contexts come and go; each gets a number in its
     # part, on its home staff (the one most of its notes are on), shared with
@@ -449,6 +464,10 @@ class _Builder:
             part, staff = self.place[e["staff"]]
         else:  # a score-wide event (tempo): the first staff
             part, staff = self.parts[0], 1
+        # A Dynamics line's marks go where the line is, whatever their ^ or _:
+        # it is drawn between (or under) the staves.
+        if e["staff"] in self.placement:
+            fields["placement"] = self.placement[e["staff"]]
         voice = 0
         # Pedals and octave shifts belong to the staff: written in one pass, in
         # time order, as MuseScore pairs them in file order.
@@ -632,11 +651,16 @@ class _Builder:
         maintainer = get("maintainer")
         rights = f"{licence} — {maintainer}" if licence and maintainer else licence
         mutopia = MUTOPIA_FOOTER.search(fields.get("footer", ""))
-        source = (f"https://www.mutopiaproject.org/cgibin/piece-info.cgi?id={mutopia.group(1)}"
-                  if mutopia else None)
+        edition = get("source")
+        source = None
+        if mutopia:
+            source = f"https://www.mutopiaproject.org/cgibin/piece-info.cgi?id={mutopia.group(1)}"
+        elif edition and re.match(r"https?://", edition):
+            # A URL (Snortum's IMSLP engravings: the facsimile they follow).
+            source, edition = edition, None
         if len(self.parts) == 1 and not self.parts[0].name:
             self.parts[0].name = get("mutopiainstrument", "instrument") or ""
         return Metadata(title=get("title"), subtitle=get("subtitle"), piece=get("piece"),
                         opus=get("opus"), composer=get("composer"), arranger=get("arranger"),
                         poet=get("poet"), rights=rights, source=source,
-                        edition=get("source"))
+                        edition=edition)
