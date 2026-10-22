@@ -69,9 +69,11 @@ class Direction:
     time: Time
     staff: int
     voice: int        # 0 if it belongs to no voice with notes
-    kind: str         # "dynamic", "words", "wedge", "pedal", "tempo"
+    kind: str         # "dynamic", "words", "wedge", "pedal", "tempo", "octave-shift"
     text: str = ""
-    type: str = ""    # wedge: "crescendo"/"diminuendo"/"stop"; pedal: "start"/"stop"
+    type: str = ""    # wedge: "crescendo"/"diminuendo"/"stop"; pedal: "start"/"stop";
+                      # octave-shift: "down" (8va: drawn lower), "up", "stop"
+    size: int = 0     # octave-shift: 8, 15, 22
     placement: str | None = None  # "above"/"below"
     tempo_unit: Duration | None = None
     tempo_count: Fraction | None = None

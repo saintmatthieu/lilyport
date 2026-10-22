@@ -355,8 +355,9 @@ class _PartWriter:
             if direction.sound_tempo:
                 ET.SubElement(element, "sound", tempo=_number(direction.sound_tempo))
             return
-        placement = direction.placement or ("below" if direction.kind in ("dynamic", "wedge",
-                                                                          "pedal") else "above")
+        placement = direction.placement or (
+            "below" if direction.kind in ("dynamic", "wedge", "pedal")
+            or (direction.kind == "octave-shift" and direction.type == "up") else "above")
         xml = ET.SubElement(element, "direction", placement=placement)
         kind_element = ET.SubElement(xml, "direction-type")
         if direction.kind == "dynamic":
@@ -369,6 +370,9 @@ class _PartWriter:
             _text(kind_element, "words", direction.text)
         elif direction.kind == "wedge":
             ET.SubElement(kind_element, "wedge", type=direction.type)
+        elif direction.kind == "octave-shift":
+            ET.SubElement(kind_element, "octave-shift", type=direction.type, number="1",
+                          **({"size": str(direction.size)} if direction.type != "stop" else {}))
         elif direction.kind == "pedal":
             ET.SubElement(kind_element, "pedal", type=direction.type, line="no", sign="yes")
         elif direction.kind == "tempo":

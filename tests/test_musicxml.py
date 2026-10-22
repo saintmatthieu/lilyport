@@ -100,7 +100,7 @@ def test_markings():
     assert root.findtext("work/work-title") == "Markings"
     assert root.findtext("identification/creator[@type='composer']") == "Nobody"
     assert root.findtext("identification/rights") == "Public Domain"
-    first, second, third, fourth, fifth = measures(root)
+    first, second, third, fourth, fifth, sixth = measures(root)
     assert first.find("direction/direction-type/dynamics/p") is not None
     slurs = [s.get("type") for s in first.iter("slur")]
     assert slurs == ["start", "stop"]
@@ -123,6 +123,12 @@ def test_markings():
     assert [(c.tag, c.get("type")) for c in trill.find("notations/ornaments")] == \
         [("trill-mark", None), ("wavy-line", "start"), ("wavy-line", "stop")]
     assert grace.find("grace") is not None and grace.find("notations/ornaments") is None
+    # \ottava #1 over C and D: sounding pitches, drawn an octave lower.
+    stream = [(e.tag, e.findtext("pitch/step") or e.find(".//octave-shift").get("type"))
+              for e in sixth if e.tag in ("note", "direction")]
+    assert stream == [("direction", "down"), ("note", "C"), ("note", "D"),
+                      ("direction", "stop"), ("note", "E"), ("note", "F")]
+    assert notes(sixth)[0].findtext("pitch/octave") == "7"
 
 
 def test_mxl(tmp_path):

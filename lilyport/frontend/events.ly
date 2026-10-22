@@ -244,6 +244,10 @@ with \\sustainOn, or a turn with the accidentals of its notes."
             "dir" (event-direction event)))
      ((slur-event engraver event)
       (emit (ly:translator-context engraver) event "slur" "dir" (event-direction event)))
+     ((ottava-event engraver event)
+      ;; \ottava #1: 8va (notes drawn an octave lower), #0 ends it
+      (emit (ly:translator-context engraver) event "ottava"
+            "octaves" (json-number (ly:event-property event 'ottava-number 0))))
      ((trill-span-event engraver event)
       (emit (ly:translator-context engraver) event "trill-span" "dir" (event-direction event)))
      ((phrasing-slur-event engraver event)

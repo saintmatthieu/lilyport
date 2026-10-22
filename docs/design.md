@@ -359,7 +359,8 @@ lilyport/
 - **Done:** marks drawn as text (the Nocturne): `pedal.Ped`/`pedal.*`
   glyphs as pedals (a press while down is written release + press, as
   importers pair them in file order; each staff's pedals in one pass),
-  `\startTrillSpan` as a trill with its wavy line; `scripts.turn`/`trill`...
+  `\startTrillSpan` as a trill with its wavy line; `\ottava` (and the old
+  `set-octavation`) as `<octave-shift>`; `scripts.turn`/`trill`...
   as ornaments with the accidentals stacked above
   and below (`<accidental-mark>`), digit texts as fingerings; hidden
   metronome marks (`MetronomeMark.transparent`, `\omit`) as playback only;

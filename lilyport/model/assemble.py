@@ -118,6 +118,7 @@ class _Builder:
         self._beams()
         self._marks()
         self._pedals()
+        self._octave_shifts()
         self._staff_settings()
         self._time_signatures()
         self._measures()
@@ -325,6 +326,12 @@ class _Builder:
                 chord = self._chord_at(e)
                 if chord:
                     chord.fingerings.append(str(e["digit"]))
+            elif kind == "ottava":
+                # Pitches stay as they sound; the shift is how they're drawn.
+                octaves = int(e["octaves"])
+                kind_of = "stop" if octaves == 0 else "down" if octaves > 0 else "up"
+                self._direction(e, "octave-shift", type=kind_of,
+                                size={1: 8, 2: 15, 3: 22}.get(abs(octaves), 8))
             elif kind == "trill-span":
                 # \startTrillSpan: "tr" and a wavy line. \stopTrillSpan ends
                 # it before its note (often the first grace note of the
@@ -378,6 +385,20 @@ class _Builder:
                 if kind != "skip":
                     self.unhandled[kind] += 1
 
+    def _octave_shifts(self):
+        """\\ottava #1 then #2 is one shift ending where the next begins."""
+        for part in self.parts:
+            shifted = set()
+            for shift in sorted((d for d in part.directions if d.kind == "octave-shift"),
+                                key=lambda d: (d.time, d.type != "stop")):
+                if shift.type != "stop" and shift.staff in shifted:
+                    part.directions.append(Direction(shift.time, shift.staff, 0,
+                                                     "octave-shift", type="stop"))
+                elif shift.type == "stop" and shift.staff not in shifted:
+                    part.directions.remove(shift)  # \ottava #0 with none on
+                    continue
+                (shifted.discard if shift.type == "stop" else shifted.add)(shift.staff)
+
     def _pedals(self):
         """A press while the pedal is down is a re-pedalling ("Ped. Ped."): a
         release first, which importers need to pair them."""
@@ -429,9 +450,9 @@ class _Builder:
         else:  # a score-wide event (tempo): the first staff
             part, staff = self.parts[0], 1
         voice = 0
-        # Pedals belong to the staff: written in one pass, in time order, as
-        # MuseScore pairs them in file order.
-        if kind != "pedal" and e["voice"] in self.voice and self.voice[e["voice"]][0] is part:
+        # Pedals and octave shifts belong to the staff: written in one pass, in
+        # time order, as MuseScore pairs them in file order.
+        if kind not in ("pedal", "octave-shift") and e["voice"] in self.voice and self.voice[e["voice"]][0] is part:
             voice = self.voice[e["voice"]][1]
         part.directions.append(Direction(_time(e), staff, voice, kind, **fields))
 
