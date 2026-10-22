@@ -117,11 +117,12 @@ def test_markings():
     assert [p.get("type") for p in fourth.iter("pedal")] == ["start", "stop"]
     assert fourth.findtext("direction/direction-type/words") == "dolce"
     assert fourth.find("note/notations/ornaments/trill-mark") is not None
-    # \startTrillSpan: "tr" and a wavy line, to the resolution's first grace note.
+    # \startTrillSpan to the resolution's first grace note: the trill and its
+    # line on the F alone, the grace notes untrilled.
     trill, grace = notes(fifth)[:2]
-    assert [c.tag for c in trill.find("notations/ornaments")] == ["trill-mark", "wavy-line"]
-    assert grace.find("grace") is not None
-    assert grace.find("notations/ornaments/wavy-line").get("type") == "stop"
+    assert [(c.tag, c.get("type")) for c in trill.find("notations/ornaments")] == \
+        [("trill-mark", None), ("wavy-line", "start"), ("wavy-line", "stop")]
+    assert grace.find("grace") is not None and grace.find("notations/ornaments") is None
 
 
 def test_mxl(tmp_path):

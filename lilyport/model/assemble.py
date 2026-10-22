@@ -326,14 +326,22 @@ class _Builder:
                 if chord:
                     chord.fingerings.append(str(e["digit"]))
             elif kind == "trill-span":
-                # \startTrillSpan: "tr" and a wavy line, to \stopTrillSpan
-                # (often on the first grace note of the trill's resolution).
-                chord = self._span_chord(e)
-                if chord and e["dir"] == -1:
-                    chord.marks.append("trill")
-                    chord.trill_line.append("start")
-                elif chord:
-                    chord.trill_line.append("stop")
+                # \startTrillSpan: "tr" and a wavy line. \stopTrillSpan ends
+                # it before its note (often the first grace note of the
+                # resolution): MusicXML's stop goes on the last note trilled.
+                if e["dir"] == -1:
+                    chord = self._span_chord(e)
+                    if chord:
+                        chord.marks.append("trill")
+                        chord.trill_line.append("start")
+                else:
+                    time = _time(e)
+                    chord = next((c for c in reversed(self.by_voice.get(e["voice"], []))
+                                  if c.time < time and not c.grace), None)
+                    if chord:
+                        chord.trill_line.append("stop")
+                    else:
+                        self.warn(f"bar {e['bar']}: a trill line ends on no note: dropped")
             elif kind == "arpeggio":
                 chord = self._chord_at(e)
                 if chord:
