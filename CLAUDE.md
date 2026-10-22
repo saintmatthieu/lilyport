@@ -16,7 +16,7 @@ consumer), the verification plan, what Mutopia sources taught, and the
 ```sh
 tools/fetch-lilypond.sh [version]   # official LilyPond release into .tools/ (default 2.26.0)
 tools/fetch-corpus.sh               # Mutopia test pieces into .corpus/mutopia/ (+ convert-ly)
-python3 -m lilyport convert PIECE.ly -o PIECE.mxl   # or .musicxml
+python3 -m lilyport convert PIECE.ly -o PIECE.mxl [--tempo 4=54]   # or .musicxml
 python3 -m lilyport dump PIECE.ly [-o EVENTS.jsonl]
 python3 -m venv .venv && .venv/bin/pip install -e '.[test]' && .venv/bin/pytest
 ```

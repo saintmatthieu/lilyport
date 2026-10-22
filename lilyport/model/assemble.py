@@ -18,6 +18,8 @@ PLAIN_BARS = {"", "|"}
 # "4 - 5": a finger substitution written as text (Mutopia's Moonlight).
 FINGERING_TEXT = re.compile(r"^\s*\d(\s*-\s*\d)*\s*$")
 MUTOPIA_FOOTER = re.compile(r"Mutopia-\d{4}/\d{1,2}/\d{1,2}-(\d+)")
+# LilyPond's tempo notation: 4=54, 4.=60, 2=30.
+TEMPO = re.compile(r"^\s*(\d+)(\.*)\s*=\s*(\d+(?:\.\d+)?)\s*$")
 
 
 def assemble(events, score=1):
@@ -27,6 +29,27 @@ def assemble(events, score=1):
         raise ValueError(f"no events for score {score}")
     builder = _Builder(events)
     return builder.build()
+
+
+def parse_tempo(text):
+    """Quarter notes per minute of a tempo in LilyPond's notation (4=54)."""
+    match = TEMPO.match(text)
+    unit = int(match.group(1)) if match else 0
+    if not match or unit & (unit - 1):
+        raise ValueError(f"not a tempo like 4=54: {text!r}")
+    duration = Duration(unit.bit_length() - 1, len(match.group(2)))
+    return Fraction(match.group(3)) * duration.length * 4
+
+
+def set_starting_tempo(score, quarters):
+    """Plays the score from the start at this many quarter notes per minute
+    (the mark shown, if any, is kept)."""
+    first = score.parts[0]
+    start = next((d for d in first.directions if d.kind == "tempo" and d.time[0] == 0), None)
+    if start is None:
+        start = Direction((Fraction(0), Fraction(0)), 1, 0, "tempo", placement="above")
+        first.directions.append(start)
+    start.sound_tempo = quarters
 
 
 def _time(e):

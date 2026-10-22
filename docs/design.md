@@ -350,7 +350,9 @@ lilyport/
   text, tempo (without a `\tempo` at the start: the header's `piece`, which
   LilyPond prints above the first system, as tempo words, and a `<sound>`
   at the tempo LilyPond's MIDI plays, from the score's `\midi` or the
-  default 4 = 60 — importers otherwise play at 120), final bar lines; metadata into `<work>`, `<identification>`
+  default 4 = 60 — importers otherwise play at 120; `--tempo 4=54` sets it
+  per piece: tempo words make poor numbers, e.g. Adagio in cut time),
+  final bar lines; metadata into `<work>`, `<identification>`
   (rights = licence — maintainer, source = Mutopia page URL). On both pieces
   music21's reading of the output matches LilyPond's dump note for note
   (onset, spelled pitch, length, staff).

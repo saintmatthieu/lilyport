@@ -1,5 +1,5 @@
 """Command line:
-  lilyport convert PIECE.ly -o PIECE.mxl   (or .musicxml)
+  lilyport convert PIECE.ly -o PIECE.mxl [--tempo 4=54]   (or .musicxml)
   lilyport dump PIECE.ly [-o EVENTS.jsonl]"""
 import argparse
 import json
@@ -7,8 +7,15 @@ import sys
 
 from . import __version__
 from .frontend.lilypond import LilyPondError, dump_events
-from .model.assemble import assemble
+from .model.assemble import assemble, parse_tempo, set_starting_tempo
 from .writers import musicxml
+
+
+def tempo(text):
+    try:
+        return parse_tempo(text)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(str(error))
 
 
 def main(argv=None):
@@ -20,6 +27,9 @@ def main(argv=None):
     convert.add_argument("-o", "--output", required=True)
     convert.add_argument("--score", type=int, default=1,
                          help="which \\score of the file (default: the first)")
+    convert.add_argument("--tempo", type=tempo, metavar="4=54",
+                         help="playback tempo at the start, in LilyPond's notation "
+                              "(default: LilyPond's MIDI tempo)")
     dump = commands.add_parser("dump", help="write the music LilyPond evaluated, as JSON lines")
     dump.add_argument("ly")
     dump.add_argument("-o", "--output", help="file to write (default: standard output)")
@@ -33,6 +43,8 @@ def main(argv=None):
 
     if args.command == "convert":
         score = assemble(events, args.score)
+        if args.tempo:
+            set_starting_tempo(score, args.tempo)
         for warning in score.warnings:
             print(f"lilyport: warning: {warning}", file=sys.stderr)
         musicxml.write(score, args.output)

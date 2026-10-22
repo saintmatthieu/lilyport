@@ -8,7 +8,8 @@ from pathlib import Path
 import pytest
 
 from lilyport.frontend.lilypond import dump_events, find_lilypond
-from lilyport.model.assemble import assemble
+from lilyport.cli import main
+from lilyport.model.assemble import assemble, parse_tempo
 from lilyport.writers import musicxml
 
 FIXTURES = Path(__file__).with_name("fixtures")
@@ -164,3 +165,16 @@ def test_starting_tempo():
     assert marks[0].findtext("direction-type/words") == "Allegro"
     assert marks[0].findtext("direction-type/metronome/per-minute") == "132"
     assert marks[0].find("sound").get("tempo") == "132"
+
+
+def test_tempo_option(tmp_path):
+    assert parse_tempo("4=54") == 54
+    assert parse_tempo("4.=40") == 60
+    assert parse_tempo("2 = 30") == 60
+    with pytest.raises(ValueError):
+        parse_tempo("3=60")
+    out = tmp_path / "tempo.musicxml"
+    main(["convert", str(FIXTURES / "tempo.ly"), "-o", str(out), "--tempo", "4.=40"])
+    heading = ET.parse(out).getroot().find("part/measure/direction")
+    assert heading.findtext("direction-type/words") == "Adagio sostenuto"
+    assert heading.find("sound").get("tempo") == "60"
