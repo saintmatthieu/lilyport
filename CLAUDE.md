@@ -43,7 +43,8 @@ system or base conda Python: use `.venv/`.
   Matthieu Hodgkinson`, the year the file was written).
 - Comments say why, in plain words; docstrings on modules and public functions.
 - Commit directly on `main`, only the change's paths, with the
-  `Co-Authored-By` trailer. No remote yet: don't push unless asked.
+  `Co-Authored-By` trailer. Remote: github.com/saintmatthieu/lilyport
+  (public); don't push unless asked.
 
 ## Pitfalls met so far
 
