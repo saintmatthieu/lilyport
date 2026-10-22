@@ -1,5 +1,6 @@
 """Builds the score model from the listener's events (frontend/events.ly)."""
 import re
+from bisect import bisect_right
 from collections import Counter, defaultdict
 from fractions import Fraction
 
@@ -120,6 +121,7 @@ class _Builder:
         self._staff_settings()
         self._time_signatures()
         self._measures()
+        self._slur_numbers()
         self._measure_rests()
         self._bar_lines()
         self._starting_tempo()
@@ -293,22 +295,23 @@ class _Builder:
     # What is attached to notes, and directions.
 
     def _marks(self):
-        open_slurs = defaultdict(list)  # (voice id, kind) -> numbers
+        # A slur ends on the one that started in its voice with its kind;
+        # numbers come once the bars are known (_slur_numbers).
+        self.slurs = []  # [part, voice id, start chord, stop chord or None]
+        open_slurs = defaultdict(list)  # (voice id, kind) -> open slurs
         slur_events = sorted(
             (e for e in self.events if e["kind"] in ("slur", "phrasing-slur")),
-            key=lambda e: (e["voice"], _time(e), e["dir"] != 1))
+            key=lambda e: (_time(e), e["dir"] != 1, e["voice"]))
         for e in slur_events:
             chord = self._slur_chord(e)
             if chord is None:
                 continue
             if e["dir"] == -1:
-                busy = {n for (v, _), numbers in open_slurs.items() if v == e["voice"]
-                        for n in numbers}
-                number = next(n for n in range(1, 17) if n not in busy)
-                open_slurs[(e["voice"], e["kind"])].append(number)
-                chord.slurs.append(("start", number))
+                slur = [self.voice[e["voice"]][0], e["voice"], chord, None]
+                self.slurs.append(slur)
+                open_slurs[(e["voice"], e["kind"])].append(slur)
             elif open_slurs[(e["voice"], e["kind"])]:
-                chord.slurs.append(("stop", open_slurs[(e["voice"], e["kind"])].pop()))
+                open_slurs[(e["voice"], e["kind"])].pop()[3] = chord
             else:
                 self.warn(f"bar {e['bar']}: a {e['kind']} ends that didn't start")
 
@@ -506,6 +509,33 @@ class _Builder:
                 and self.measures[1].number.endswith("a"):
             self.measures[1].number = self.measures[0].number
             self.measures[0].number = str(int(self.measures[0].number) - 1)
+
+    def _slur_numbers(self):
+        """Importers pair slurs by number, in file order, in the whole part;
+        a bar is written voice by voice. So a number is reused in a voice once
+        its slur has ended, in another voice once its slur's bars are past."""
+        starts = [m.start for m in self.measures]
+
+        def bar(chord):
+            return bisect_right(starts, chord.time[0]) - 1
+
+        numbered = []  # (part, voice, start time, stop time, first bar, last bar, number)
+        for part, voice, start, stop in sorted(self.slurs, key=lambda s: s[2].time):
+            first = bar(start)
+            last = bar(stop) if stop else len(starts)
+            end = stop.time if stop else END_OF_TIME
+            busy = {n for p, v, s, e, f, l, n in numbered if p is part and (
+                (v == voice and s < end and start.time < e) or
+                (v != voice and f <= last and first <= l))}
+            number = next((n for n in range(1, 17) if n not in busy), None)
+            if number is None:
+                self.warn(f"more than 16 slurs at once at {start.time[0]}: one dropped")
+                continue
+            numbered.append((part, voice, start.time, end, first, last, number))
+            start.slurs.append(("start", number))
+            if stop:
+                # A slur ending where another begins: the end first.
+                stop.slurs.insert(0, ("stop", number))
 
     def _measure_rests(self):
         for part in self.parts:

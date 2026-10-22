@@ -199,3 +199,20 @@ def test_text_marks():
     assert alters == {"above": "flat", "below": "natural"}
     assert root.find(".//words") is None
     assert notes(first)[2].findtext("notations/technical/fingering") == "54"
+
+
+def test_slurs_pair_in_file_order():
+    root = convert(FIXTURES / "slurs.ly")
+    open_slurs = {}
+    pairs = []
+    for note in root.iter("note"):
+        for slur in note.iter("slur"):
+            number, step = slur.get("number"), note.findtext("pitch/step")
+            if slur.get("type") == "start":
+                assert number not in open_slurs
+                open_slurs[number] = step
+            else:
+                pairs.append((open_slurs.pop(number), step))
+    # The upper staff's C to F, and the lower staff's four pairs per bar.
+    assert ("C", "F") in pairs and len(pairs) == 5
+    assert pairs.count(("C", "D")) == 1 and pairs.count(("B", "C")) == 1

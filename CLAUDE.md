@@ -65,6 +65,9 @@ system or base conda Python: use `.venv/`.
   `articulations` (not broadcast); a lone note's are broadcast as events.
 - In a cadenza `measurePosition` stays 0 (the listener records `timing`), and
   the bar after it keeps the cadenza's bar number.
+- MuseScore's importer pairs slurs (and pedals) by number in file order,
+  across the whole part; a measure is written voice by voice, so slurs of
+  different voices in the same bars need different numbers.
 - MuseScore's importer ignores `<stem>` on notes it beams itself: write
   LilyPond's beams. In 2.25+ `measureLength` and `beatBase` (was
   `baseMoment`) are numbers, not moments.
