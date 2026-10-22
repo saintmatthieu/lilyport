@@ -103,21 +103,25 @@ class _Builder:
 
     # Voices: LilyPond's voice contexts come and go; each gets a number in its
     # part, on its home staff (the one most of its notes are on), shared with
-    # voices that don't overlap it in time.
+    # voices that don't overlap it in time. Voices with stems up (\voiceOne)
+    # choose first, so that they get the lower numbers, which importers draw
+    # with stems up.
 
     def _voices(self):
         staves = defaultdict(Counter)
+        stems = defaultdict(Counter)
         spans = {}
         for e in self.events:
             if e["kind"] in ("note", "rest", "multi-measure-rest") and e["voice"]:
                 staves[e["voice"]][e["staff"]] += 1
+                stems[e["voice"]][-e.get("stem", 0)] += 1
                 start = _time(e)[0]
                 end = start + _duration(e["duration"]).length
                 old = spans.get(e["voice"], (start, end))
                 spans[e["voice"]] = (min(old[0], start), max(old[1], end))
         self.voice = {}  # voice id -> (part, number)
         taken = defaultdict(list)  # (part id, number) -> spans
-        homes = sorted(staves, key=lambda v: (spans[v][0], v))
+        homes = sorted(staves, key=lambda v: (stems[v].most_common(1)[0][0], spans[v][0], v))
         for voice in homes:
             part, staff = self.place[staves[voice].most_common(1)[0][0]]
             start, end = spans[voice]
@@ -152,7 +156,8 @@ class _Builder:
             chord = self.chords.get(key)
             if chord is None:
                 chord = Chord(time, duration, staff, number, [],
-                              measure_rest=kind == "multi-measure-rest")
+                              measure_rest=kind == "multi-measure-rest",
+                              stem={1: "up", -1: "down"}.get(e.get("stem")))
                 self.chords[key] = chord
                 part.chords.append(chord)
             elif chord.duration != duration:

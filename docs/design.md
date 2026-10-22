@@ -336,7 +336,8 @@ lilyport/
   `copyright`; the Mutopia id ends `footer`, e.g. `Mutopia-2007/02/11-276`).
 - **Done:** the score model and the MusicXML writer (`lilyport convert
   PIECE.ly -o PIECE.mxl`): parts from PianoStaff grouping, voices numbered
-  per home staff (cross-staff notes keep their voice), chords, ties (per note
+  per home staff (cross-staff notes keep their voice; stems-up voices take
+  the lower numbers), stem directions the source sets, chords, ties (per note
   in chords), tuplets, grace notes, pickups, cadenzas, multi-measure rests,
   key/time/clef changes, slurs, articulations and ornaments, fingerings
   (Moonlight's text "4 - 5" as a substitution), dynamics, hairpins, pedals,

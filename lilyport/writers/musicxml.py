@@ -291,6 +291,8 @@ class _PartWriter:
                 modification = ET.SubElement(xml, "time-modification")
                 _text(modification, "actual-notes", duration.factor.denominator)
                 _text(modification, "normal-notes", duration.factor.numerator)
+        if chord.stem and note is not None:
+            _text(xml, "stem", chord.stem)
         if self.part.staves > 1:
             _text(xml, "staff", chord.staff)
         self.notations(xml, chord, note, first=index == 0)

@@ -40,6 +40,9 @@
 %% is in, e.g. a PianoStaff, and its instrument name). "timing" records
 %% \cadenzaOn/Off (on: false/true).
 %%
+%% A note's "stem" is the direction its context sets (1 up, -1 down), absent
+%% when LilyPond chooses.
+%%
 %% A note inside a chord carries its own tie ("tie": true) and fingerings
 %% ("fingers"), which LilyPond doesn't broadcast as events.
 %%
@@ -181,10 +184,15 @@ mark, such as a \"Ped.\" drawn as text rather than with \\sustainOn."
                        (lambda (a)
                          (and (memq 'fingering-event (ly:event-property a 'class))
                               (json-number (ly:event-property a 'digit 0))))
-                       articulations)))
+                       articulations))
+             ;; \voiceOne, \stemUp...: 1 up, -1 down; none if LilyPond decides
+             (stem (assq-ref (ly:context-grob-definition ctx 'Stem) 'direction)))
         (apply emit ctx event "note"
                (append
                 (if pitch (list "pitch" (json-pitch pitch)) '())
+                (if (and (number? stem) (not (zero? stem)))
+                    (list "stem" (json-number stem))
+                    '())
                 (list "duration" (json-duration (ly:event-property event 'duration)))
                 (if tied (list "tie" "true") '())
                 (if (pair? fingers)

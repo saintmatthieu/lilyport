@@ -134,3 +134,10 @@ def test_mutopia(piece):
     check_timing(root)
     pitches = sum(1 for e in events if e["kind"] == "note")
     assert len(root.findall("part/measure/note/pitch")) == pitches
+
+
+def test_voice_one_is_voice_one():
+    root = convert(FIXTURES / "late-voice-one.ly")
+    high, low = sorted(notes(measures(root)[1]), key=lambda n: -int(n.findtext("pitch/octave")))
+    assert (high.findtext("voice"), high.findtext("stem")) == ("1", "up")
+    assert (low.findtext("voice"), low.findtext("stem")) == ("2", "down")

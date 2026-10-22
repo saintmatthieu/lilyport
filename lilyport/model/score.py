@@ -52,6 +52,7 @@ class Chord:
     marks: list[str] = field(default_factory=list)   # LilyPond's names: "staccato", "fermata", "trill"...
     fingerings: list[str] = field(default_factory=list)  # "4", or "4-5" for a substitution
     arpeggio: bool = False
+    stem: str | None = None  # "up"/"down" as the source sets it, None if automatic
 
     @property
     def grace(self) -> bool:
