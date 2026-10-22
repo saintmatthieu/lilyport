@@ -1,0 +1,15 @@
+# Local LilyPond installs (tools/fetch-lilypond.sh)
+/.tools/
+# Mutopia sources and other downloaded test corpora
+/.corpus/
+# Python
+__pycache__/
+*.egg-info/
+/.venv/
+/build/
+/dist/
+# What LilyPond writes next to its input
+*.events.jsonl
+*.pdf
+*.midi
+*.mid

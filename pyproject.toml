@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lilyport"
+version = "0.0.1"
+description = "Export LilyPond scores to MusicXML (and more), checked against LilyPond's own MIDI"
+readme = "README.md"
+license = "GPL-3.0-or-later"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+test = ["pytest", "mido", "verovio", "music21", "lxml"]
+
+[project.scripts]
+lilyport = "lilyport.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["lilyport*"]
+
+[tool.setuptools.package-data]
+lilyport = ["frontend/*.ly"]
