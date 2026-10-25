@@ -33,10 +33,11 @@ def find_lilypond():
                             "or set LILYPOND")
 
 
-def dump_events(ly_file, lilypond=None, keep_midi_in=None):
+def dump_events(ly_file, lilypond=None, keep_midi_in=None, settings=()):
     """Runs LilyPond on ly_file with the event listener and returns the events
     (a list of dicts, see events.ly). No PDF is written; a \\midi block's MIDI
-    file goes to keep_midi_in if given, else is discarded."""
+    file goes to keep_midi_in if given, else is discarded. settings: more .ly
+    files to load before the score, as the listener is."""
     ly_file = Path(ly_file).resolve()
     with tempfile.TemporaryDirectory(prefix="lilyport-") as work:
         events_path = Path(work) / "events.jsonl"
@@ -45,6 +46,7 @@ def dump_events(ly_file, lilypond=None, keep_midi_in=None):
                    "-dno-print-pages",
                    f"-dinclude-settings={COMPAT_LY}",
                    f"-dinclude-settings={EVENTS_LY}",
+                   *(f"-dinclude-settings={Path(s).resolve()}" for s in settings),
                    "-o", str(output_dir / ly_file.stem),
                    str(ly_file)]
         result = subprocess.run(command, cwd=ly_file.parent, capture_output=True,

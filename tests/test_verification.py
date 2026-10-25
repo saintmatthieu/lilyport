@@ -1,0 +1,57 @@
+"""lilyport's MusicXML read by programs that didn't write it (tests/verify.py):
+valid against the MusicXML 4.0 schema (tools/fetch-schema.sh), and played by
+Verovio as LilyPond plays the source. Needs LilyPond and the test extras."""
+import tempfile
+from pathlib import Path
+
+import pytest
+
+from lilyport.frontend.lilypond import dump_events, find_lilypond
+from lilyport.model.assemble import assemble
+from lilyport.writers.musicxml import to_string
+from verify import (ADD_MIDI, SCHEMA, lilypond_midi_files, midi_differences,
+                    schema_errors)
+
+FIXTURES = Path(__file__).with_name("fixtures")
+CORPUS = Path(__file__).resolve().parents[1] / ".corpus"
+# Files with several \book blocks name their MIDI files ambiguously.
+NO_MIDI = {"headers.ly"}
+
+try:
+    find_lilypond()
+except FileNotFoundError:
+    pytestmark = pytest.mark.skip("LilyPond not found: run tools/fetch-lilypond.sh")
+
+SNORTUM = CORPUS / "imslp" / "snortum-op9" / "Frederic-Chopin-Nocturnes-Op9.ly"
+# (file, scores to check: None for all)
+PIECES = [pytest.param(path, None, id=path.stem) for path in sorted(FIXTURES.glob("*.ly"))] + [
+    pytest.param(CORPUS / "mutopia" / "moonlight1-a4.converted.ly", None, id="moonlight"),
+    pytest.param(CORPUS / "mutopia" / "chopin_nocturne_op9_n2.converted.ly", None,
+                 id="nocturne-mutopia"),
+    pytest.param(SNORTUM, [1], id="snortum-no1"),
+    pytest.param(SNORTUM, [2], id="snortum-no2"),
+    pytest.param(SNORTUM, [3], id="snortum-no3", marks=pytest.mark.xfail(
+        reason="Verovio crashes on its cadenza (bar 155: one-note tuplets, a scaled "
+               "chord); lilyport warns of ties leading nowhere: to look into")),
+]
+
+
+@pytest.mark.parametrize("ly, scores", PIECES)
+def test_read_by_others(ly, scores):
+    if not ly.exists():
+        pytest.skip(f"{ly.name}: not fetched (tools/fetch-corpus.sh, or by hand)")
+    if not SCHEMA.exists():
+        pytest.skip("no MusicXML schema: run tools/fetch-schema.sh")
+    with tempfile.TemporaryDirectory() as work:
+        events = dump_events(ly, keep_midi_in=work, settings=[ADD_MIDI])
+        midis = [] if ly.name in NO_MIDI else \
+            [path.read_bytes() for path in lilypond_midi_files(work, ly.stem)]
+    problems = []
+    for score in scores or sorted({e["score"] for e in events}):
+        scored = [e for e in events if e["score"] == score]
+        xml = to_string(assemble(scored, score))
+        problems += [f"score {score}: {error}" for error in schema_errors(xml)]
+        if midis:
+            problems += [f"score {score}: {difference}"
+                         for difference in midi_differences(midis[score - 1], xml, scored)]
+    assert not problems, "\n".join(problems[:30])

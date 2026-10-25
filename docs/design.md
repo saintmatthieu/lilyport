@@ -372,8 +372,18 @@ lilyport/
   facsimile of a first edition; `.corpus/imslp/snortum-op9/`, downloaded by
   hand: IMSLP answers scripts with a captcha). No. 2 is its `--score 2`;
   its notes match LilyPond's, its pedals and hairpins are native.
-- **Next:** the verification harness (XSD, Verovio MIDI against LilyPond's
-  MIDI, music21 structured diff) as tests; check both pieces in Orchestrion's
+- **Done:** verification (`tests/verify.py`, `tests/test_verification.py`):
+  every fixture and corpus piece is valid against the MusicXML 4.0 schema,
+  and Verovio's MIDI of our MusicXML matches LilyPond's own MIDI of the
+  source note for note (looser where the two play the notation differently:
+  grace notes, rolled chords, unisons, articulations). It found: `<beam>` on
+  a chord's other notes (Verovio rejects it); scaled durations (`a8*2/3`)
+  with no `<tuplet>` (now hidden tuplets); `\afterGrace` notes written
+  inside their main note (now before the next note). Snortum's No. 3 is an
+  expected failure: Verovio crashes on its cadenza (bar 155), and lilyport
+  warns of ties leading nowhere there.
+- **Next:** the structured comparison through music21 (spelling, voices,
+  staves, marks) as a test; check both pieces in Orchestrion's
   Debug build; `\cresc` as words + dashes; dynamics in markups
   (`\markup \dynamic pp`) are written as words.
 - **Open:** repeat structure (`repeatCommands` is recorded, not written);

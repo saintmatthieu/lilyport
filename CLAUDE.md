@@ -16,6 +16,7 @@ consumer), the verification plan, what Mutopia sources taught, and the
 ```sh
 tools/fetch-lilypond.sh [version]   # official LilyPond release into .tools/ (default 2.26.0)
 tools/fetch-corpus.sh               # Mutopia test pieces into .corpus/mutopia/ (+ convert-ly)
+tools/fetch-schema.sh               # MusicXML 4.0 schema into .corpus/musicxml-4.0/ (for the tests)
 python3 -m lilyport convert PIECE.ly -o PIECE.mxl [--tempo 4=54]   # or .musicxml
 python3 -m lilyport dump PIECE.ly [-o EVENTS.jsonl]
 python3 -m venv .venv && .venv/bin/pip install -e '.[test]' && .venv/bin/pytest
@@ -35,7 +36,10 @@ system or base conda Python: use `.venv/`.
 - `lilyport/model/` — the format-neutral score model (`score.py`) and its
   assembly from the events (`assemble.py`).
 - `lilyport/writers/` — one module per output format (`musicxml.py` first).
-- `tests/` — fixtures (small hand-written `.ly`, one feature each) and pytest.
+- `tests/` — fixtures (small hand-written `.ly`, one feature each) and pytest;
+  `verify.py` checks our MusicXML with programs that didn't write it (the
+  schema; Verovio's MIDI against LilyPond's), run on every fixture and corpus
+  piece by `test_verification.py`.
 
 ## Conventions
 
@@ -71,6 +75,12 @@ system or base conda Python: use `.venv/`.
 - MuseScore's importer ignores `<stem>` on notes it beams itself: write
   LilyPond's beams. In 2.25+ `measureLength` and `beatBase` (was
   `baseMoment`) are numbers, not moments.
+- Verovio (the MIDI check) times notes by their type unless a `<tuplet>`
+  holds them, rejects `<beam>` on a chord's other notes, plays unslashed
+  graces as appoggiaturas, rolls arpeggios, and crashes now and then: it
+  runs in a child process.
+- `\afterGrace` notes come at a moment inside their main note; lilyport
+  moves them before the next note.
 - LilyPond 2.25+ deprecates `timeSignatureFraction` for `timeSignature`.
 - Mutopia sources are old (2.10–2.12): run `convert-ly`, then expect removed
   Scheme functions (add them to `compat.ly`) and marks drawn as text markup
