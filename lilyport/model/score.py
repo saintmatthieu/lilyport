@@ -48,6 +48,7 @@ class Chord:
     measure_rest: bool = False
     tuplet_starts: int = 0   # tuplets that begin (end) on this chord
     tuplet_stops: int = 0
+    tuplet_shown: bool = True  # False for scaled durations (c8*2/3): no bracket, no number
     slurs: list[tuple[str, int]] = field(default_factory=list)  # ("start"|"stop", number)
     marks: list[str] = field(default_factory=list)   # LilyPond's names: "staccato", "fermata", "trill"...
     fingerings: list[str] = field(default_factory=list)  # "4", or "4-5" for a substitution

@@ -230,11 +230,37 @@ class _Builder:
                 chord.notes.append(Note(pitch, fingerings=[str(f) for f in e.get("fingers", [])]))
                 if e.get("tie"):
                     self.tied.add((e["voice"], time, pitch))
+        self._after_graces()
         for part in self.parts:
             part.chords.sort(key=lambda c: (c.time, c.voice))
         self.by_voice = defaultdict(list)  # voice id -> chords in time order
         for (voice, time), chord in sorted(self.chords.items(), key=lambda kv: (kv[0][0], kv[0][1])):
             self.by_voice[voice].append(chord)
+
+    def _after_graces(self):
+        """\\afterGrace notes (a trill's resolution) come at a moment inside
+        their main note (3/4 of it). They are played at its end, just before
+        the next note: moved there, as grace notes before that note, which
+        sounds and looks the same and keeps every reader's timing whole."""
+        voices = defaultdict(list)
+        for (voice, time), chord in self.chords.items():
+            voices[voice].append((time, chord))
+        for voice, timed in voices.items():
+            timed.sort(key=lambda tc: tc[0])
+            mains = [c for _, c in timed if not c.grace]
+            groups = defaultdict(list)  # end of main note -> its after-graces
+            for time, chord in timed:
+                if not chord.grace:
+                    continue
+                host = next((m for m in mains
+                             if m.time[0] < time[0] < m.time[0] + m.duration.length), None)
+                if host:
+                    groups[host.time[0] + host.duration.length].append((time, chord))
+            for end, graces in groups.items():
+                for index, (time, chord) in enumerate(graces):
+                    del self.chords[(voice, time)]
+                    chord.time = (end, Fraction(index - len(graces), 64))
+                    self.chords[(voice, chord.time)] = chord
 
     def _chord_at(self, e):
         chord = self.chords.get((e["voice"], _time(e)))
@@ -294,6 +320,35 @@ class _Builder:
                 if inside:
                     inside[0].tuplet_starts += 1
                     inside[-1].tuplet_stops += 1
+        self._scaled_tuplets()
+
+    def _scaled_tuplets(self):
+        """Scaled durations (a8*2/3 dis4*2/3) outside any \\tuplet: LilyPond
+        draws no bracket, but readers time a note by its type unless a tuplet
+        holds it (Verovio). Grouped as hidden tuplets: consecutive notes with
+        one factor, until they fill whole tuplets (1/8 + 1/4 = three eighths)."""
+        for chords in self.by_voice.values():
+            covered = 0  # tuplets open at this chord
+            group, factor = [], None
+            for chord in chords:
+                # The \\tuplet spans open here (before this grouping adds its own).
+                covered += chord.tuplet_starts
+                ends = chord.tuplet_stops
+                scaled = chord.duration.factor != 1 and not covered and not chord.grace
+                if group and (not scaled or chord.duration.factor != factor):
+                    group = []  # an incomplete group: left as it is
+                if scaled:
+                    factor = chord.duration.factor
+                    group.append(chord)
+                    bases = [c.duration.length / factor for c in group]
+                    units = sum(bases) / min(bases)
+                    if units.denominator == 1 and units.numerator % factor.denominator == 0:
+                        group[0].tuplet_starts += 1
+                        group[-1].tuplet_stops += 1
+                        for member in group:
+                            member.tuplet_shown = False
+                        group = []
+                covered -= ends
 
     def _beams(self):
         for e in self.events:

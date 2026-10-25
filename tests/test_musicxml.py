@@ -239,3 +239,18 @@ def test_dynamics_lines():
     assert ("dynamics", "1", "below") in marks and ("wedge", "1", "below") in marks
     assert ("words", "1", "below") in marks  # ^"cresc." in the line between the staves
     assert [m for m in marks if m[0] == "pedal"] == [("pedal", "2", "below")] * 2
+
+
+def test_scaled_durations_and_after_grace():
+    root = convert(FIXTURES / "scaled-and-after-grace.ly")
+    check_timing(root)
+    first, second, _ = measures(root)
+    # a8*2/3 b4*2/3 make one triplet, c d e another: tuplets LilyPond draws
+    # no bracket for.
+    starts = first.findall("note/notations/tuplet[@type='start']")
+    assert len(starts) == 2
+    assert {(t.get("bracket"), t.get("show-number")) for t in starts} == {("no", "none")}
+    # The resolution after the trilled F: grace notes before the G.
+    stream = [(n.findtext("pitch/step"), n.find("grace") is not None) for n in notes(second)]
+    assert stream == [("F", False), ("E", True), ("F", True), ("G", False)]
+    assert second.find("backup") is None

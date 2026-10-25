@@ -298,8 +298,10 @@ class _PartWriter:
             _text(xml, "stem", chord.stem)
         if self.part.staves > 1:
             _text(xml, "staff", chord.staff)
-        if chord.beam and note is not None:
-            # The primary beam: importers draw the secondary ones from the durations.
+        if chord.beam and note is not None and index == 0:
+            # The primary beam, on a chord's first note (as MuseScore writes it;
+            # Verovio rejects it on the others). Importers draw the secondary
+            # beams from the durations.
             _text(xml, "beam", chord.beam, number="1")
         self.notations(xml, chord, note, first=index == 0)
 
@@ -320,8 +322,9 @@ class _PartWriter:
         if first:
             for kind, number in chord.slurs:
                 ET.SubElement(notations, "slur", type=kind, number=str(number))
+            hidden = {} if chord.tuplet_shown else {"bracket": "no", "show-number": "none"}
             for _ in range(chord.tuplet_starts):
-                ET.SubElement(notations, "tuplet", type="start")
+                ET.SubElement(notations, "tuplet", type="start", **hidden)
             for _ in range(chord.tuplet_stops):
                 ET.SubElement(notations, "tuplet", type="stop")
             for mark in chord.marks:
