@@ -34,12 +34,14 @@ MUTOPIA_FOOTER = re.compile(r"Mutopia-\d{4}/\d{1,2}/\d{1,2}-(\d+)")
 TEMPO = re.compile(r"^\s*(\d+)(\.*)\s*=\s*(\d+(?:\.\d+)?)\s*$")
 
 
-def assemble(events, score=1):
-    """The model of one \\score of the dump (1-based)."""
+def assemble(events, score=1, tempo=None):
+    """The model of one \\score of the dump (1-based). tempo: quarter notes
+    per minute to play it from the start at (parse_tempo), instead of
+    LilyPond's MIDI tempo."""
     events = [e for e in events if e["score"] == score]
     if not events:
         raise ValueError(f"no events for score {score}")
-    builder = _Builder(events)
+    builder = _Builder(events, tempo)
     return builder.build()
 
 
@@ -51,17 +53,6 @@ def parse_tempo(text):
         raise ValueError(f"not a tempo like 4=54: {text!r}")
     duration = Duration(unit.bit_length() - 1, len(match.group(2)))
     return Fraction(match.group(3)) * duration.length * 4
-
-
-def set_starting_tempo(score, quarters):
-    """Plays the score from the start at this many quarter notes per minute
-    (the mark shown, if any, is kept)."""
-    first = score.parts[0]
-    start = next((d for d in first.directions if d.kind == "tempo" and d.time[0] == 0), None)
-    if start is None:
-        start = Direction((Fraction(0), Fraction(0)), 1, 0, "tempo", placement="above")
-        first.directions.append(start)
-    start.sound_tempo = quarters
 
 
 def _text_fingerings(text):
@@ -110,8 +101,9 @@ def _key_tonics(fifths):
 
 
 class _Builder:
-    def __init__(self, events):
+    def __init__(self, events, tempo=None):
         self.events = events
+        self.tempo = tempo
         self.warnings = []
         self.unhandled = Counter()
 
@@ -904,19 +896,27 @@ class _Builder:
                     measure.volta_start = None
 
     def _starting_tempo(self):
-        """Without a tempo mark at the start: the heading LilyPond prints above
-        the first system (the header's piece, e.g. "Adagio sostenuto"), at the
-        tempo LilyPond's MIDI plays (not an importer's default)."""
+        """The tempo the score starts at, always written (an importer's
+        default is often 120): the --tempo given, a metronome mark, else the
+        tempo LilyPond's MIDI plays, on the tempo words at the start or on
+        the heading LilyPond prints above the first system (the header's
+        piece, e.g. "Adagio sostenuto")."""
         first = self.parts[0]
-        if any(d.kind == "tempo" and d.time[0] == 0 for d in first.directions):
-            return
-        playback = next((e for e in self.events if e["kind"] == "playback"), None)
-        sound = Fraction(playback["wholes_per_minute"]).limit_denominator(1000) * 4 \
-            if playback else None
-        if self.metadata.piece or sound:
-            first.directions.append(Direction((Fraction(0), Fraction(0)), 1, 0, "tempo",
-                                              text=self.metadata.piece or "",
-                                              placement="above", sound_tempo=sound))
+        start = next((d for d in first.directions if d.kind == "tempo" and d.time[0] == 0),
+                     None)
+        if start is None:
+            start = Direction((Fraction(0), Fraction(0)), 1, 0, "tempo",
+                              text=self.metadata.piece or "", placement="above")
+            first.directions.append(start)
+        if self.tempo:
+            start.sound_tempo = self.tempo
+        elif not start.sound_tempo:
+            playback = next((e for e in self.events if e["kind"] == "playback"), {})
+            start.sound_tempo = \
+                Fraction(playback.get("wholes_per_minute", 15)).limit_denominator(1000) * 4
+            if playback.get("default", not playback):
+                self.warn("no tempo in the source: plays at LilyPond's default, "
+                          f"4 = {float(start.sound_tempo):g} (--tempo sets one)")
 
     def _metadata(self):
         fields = next((e["fields"] for e in self.events if e["kind"] == "header"), {})

@@ -36,7 +36,10 @@
 %% fields, as text, from the \score, \bookpart, \book and top-level \header
 %% blocks (an inner field hides an outer one).
 %%
-%% "playback" gives the tempo LilyPond's MIDI starts at (wholes_per_minute).
+%% "playback" gives the tempo LilyPond's MIDI starts at (wholes_per_minute):
+%% the score's \midi's, else that of a score of the book with only a \midi
+%% (Mutopia's \unfoldRepeats twin); "default": true if it is LilyPond's
+%% default (no \tempo in the \midi).
 %%
 %% Repeats: "repeat" (dir -1 a start, 1 an end; "count" the times played
 %% from a start, or gone back from an end), "volta" (dir -1 a bracket's start,
@@ -425,31 +428,50 @@ Dynamics lines between them too, which belong to a staff), and its name."
      ;; LilyPond keeps parts and scores newest first.
      (for-each (lambda (part) (lilyport-queue-headers part scopes))
                (reverse (ly:book-book-parts book)))
-     (for-each
-      (lambda (score)
-        (if (lilyport-engraved-score? score)
-            (set! lilyport-pending-headers
-                  (append lilyport-pending-headers
-                          (list (cons (if (module? (ly:score-header score))
-                                          (cons (ly:score-header score) scopes)
-                                          scopes)
-                                      (lilyport-midi-tempo score)))))))
-      (reverse (ly:book-scores book)))))
+     (let* ((scores (reverse (ly:book-scores book)))
+            (midi-only (remove lilyport-engraved-score? scores)))
+       (for-each
+        (lambda (score)
+          (if (lilyport-engraved-score? score)
+              (set! lilyport-pending-headers
+                    (append lilyport-pending-headers
+                            (list (cons (if (module? (ly:score-header score))
+                                            (cons (ly:score-header score) scopes)
+                                            scopes)
+                                        (lilyport-midi-tempo
+                                         (if (pair? (lilyport-midi-defs score))
+                                             score
+                                             (lilyport-midi-twin score scores midi-only)))))))))
+        scores))))
+
+#(define (lilyport-midi-defs score)
+   (filter (lambda (def) (eq? (ly:output-def-lookup def 'output-def-kind #f) 'midi))
+           (ly:score-output-defs score)))
+
+#(define (lilyport-midi-twin score scores midi-only)
+   "The score with only a \\midi that plays SCORE: the next one after it in
+the book, else the last before it; else SCORE."
+   (let* ((after (cdr (memq score scores)))
+          (next (find (lambda (s) (memq s midi-only)) after))
+          (before (filter (lambda (s) (not (memq s (memq score scores)))) midi-only)))
+     (or next (and (pair? before) (last before)) score)))
 
 #(define (lilyport-midi-tempo score)
-   "The tempo (wholes per minute) LilyPond's MIDI of SCORE starts at: its
-\\midi block's, else the default \\midi's (4 = 60)."
-   (let* ((midis (filter (lambda (def) (eq? (ly:output-def-lookup def 'output-def-kind #f) 'midi))
-                         (ly:score-output-defs score)))
+   "The tempo (wholes per minute) LilyPond's MIDI of SCORE starts at, and
+whether it is the default (4 = 60, the \\midi says none), as a pair: its
+\\midi block's, else the default \\midi's."
+   (let* ((midis (lilyport-midi-defs score))
           (midi (if (pair? midis) (car midis) (ly:parser-lookup '$defaultmidi)))
           (score-def (and (ly:output-def? midi) (ly:output-def-lookup midi 'Score #f)))
-          ;; Newest first: \midi { \tempo ... } before the default.
-          (op (and score-def
-                   (find (lambda (op) (and (eq? (car op) 'assign)
-                                           (eq? (cadr op) 'tempoWholesPerMinute)))
-                         (ly:context-def-lookup score-def 'property-ops '()))))
-          (tempo (and op (caddr op))))
-     (if (ly:moment? tempo) (ly:moment-main tempo) tempo)))
+          ;; Newest first: \midi { \tempo ... } before the default's.
+          (ops (if score-def
+                   (filter (lambda (op) (and (eq? (car op) 'assign)
+                                             (eq? (cadr op) 'tempoWholesPerMinute)))
+                           (ly:context-def-lookup score-def 'property-ops '()))
+                   '()))
+          (tempo (and (pair? ops) (caddr (car ops)))))
+     (cons (if (ly:moment? tempo) (ly:moment-main tempo) tempo)
+           (< (length ops) 2))))
 
 #(define (lilyport-wrap-book-handler handler)
    (lambda (book . rest)
@@ -508,8 +530,10 @@ an inner field hiding an outer one; markups as their text."
        (if scopes
            (begin
              (emit context #f "header" "fields" (json-header scopes))
-             (if midi-tempo
-                 (emit context #f "playback" "wholes_per_minute" (json-number midi-tempo)))
+             (if (and midi-tempo (car midi-tempo))
+                 (apply emit context #f "playback"
+                        "wholes_per_minute" (json-number (car midi-tempo))
+                        (if (cdr midi-tempo) (list "default" "true") '())))
              (set! scopes #f)))
        ;; timeSignature since 2.25 (timeSignatureFraction before, deprecated)
        (let ((fraction (or (ly:context-property context 'timeSignature #f)

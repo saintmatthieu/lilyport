@@ -14,8 +14,9 @@ from verify import (ADD_MIDI, SCHEMA, UNFOLD_REPEATS, lilypond_midi_files,
 
 FIXTURES = Path(__file__).with_name("fixtures")
 CORPUS = Path(__file__).resolve().parents[1] / ".corpus"
-# Files with several \book blocks name their MIDI files ambiguously.
-NO_MIDI = {"headers.ly"}
+# Files with several \book blocks name their MIDI files ambiguously; a
+# score with only a \midi has a MIDI file and no events.
+NO_MIDI = {"headers.ly", "tempo-twin.ly"}
 # Compared with Verovio playing the repeats once: repeats set by hand
 # (repeatCommands), which LilyPond plays once; ties into a second ending,
 # a stop alone, which Verovio strikes again (LilyPond's unfolded MIDI holds).

@@ -7,7 +7,7 @@ import sys
 
 from . import __version__
 from .frontend.lilypond import LilyPondError, dump_events
-from .model.assemble import assemble, parse_tempo, set_starting_tempo
+from .model.assemble import assemble, parse_tempo
 from .writers import musicxml
 
 
@@ -42,9 +42,7 @@ def main(argv=None):
         sys.exit(f"lilyport: {error}")
 
     if args.command == "convert":
-        score = assemble(events, args.score)
-        if args.tempo:
-            set_starting_tempo(score, args.tempo)
+        score = assemble(events, args.score, args.tempo)
         for warning in score.warnings:
             print(f"lilyport: warning: {warning}", file=sys.stderr)
         musicxml.write(score, args.output)

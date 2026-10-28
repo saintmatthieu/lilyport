@@ -181,6 +181,21 @@ def test_starting_tempo():
     assert marks[0].findtext("direction-type/words") == "Allegro"
     assert marks[0].findtext("direction-type/metronome/per-minute") == "132"
     assert marks[0].find("sound").get("tempo") == "132"
+    # Tempo words, no \midi: LilyPond's default tempo, written and warned about.
+    score = assemble(events, 3)
+    words = musicxml.to_element(score).find("part/measure/direction")
+    assert words.findtext("direction-type/words") == "Andante"
+    assert words.find("sound").get("tempo") == "60"
+    assert any("LilyPond's default" in w for w in score.warnings)
+    assert not any("LilyPond's default" in w for w in assemble(events, 3, 66).warnings)
+
+
+def test_tempo_of_midi_twin():
+    score = assemble(dump_events(FIXTURES / "tempo-twin.ly"))
+    words = musicxml.to_element(score).find("part/measure/direction")
+    assert words.findtext("direction-type/words") == "Not fast"
+    assert words.find("sound").get("tempo") == "72"
+    assert not score.warnings
 
 
 def test_tempo_option(tmp_path):
@@ -309,7 +324,7 @@ def test_repeats_by_hand():
 
 def test_hidden_tie():
     score = assemble(dump_events(FIXTURES / "hidden-tie.ly"))
-    assert not score.warnings
+    assert not [w for w in score.warnings if "tie" in w]
     root = musicxml.to_element(score)
     check_timing(root)
     tied = [(n.findtext("voice"), n.findtext("pitch/step"), n.find("tie").get("type"))

@@ -352,10 +352,12 @@ lilyport/
   key/time/clef changes, slurs, articulations and ornaments, fingerings
   (Moonlight's text "4 - 5" as a substitution), dynamics, hairpins, pedals,
   text, tempo (without a `\tempo` at the start: the header's `piece`, which
-  LilyPond prints above the first system, as tempo words, and a `<sound>`
-  at the tempo LilyPond's MIDI plays, from the score's `\midi` or the
-  default 4 = 60 — importers otherwise play at 120; `--tempo 4=54` sets it
-  per piece: tempo words make poor numbers, e.g. Adagio in cut time),
+  LilyPond prints above the first system, as tempo words; the start always
+  has a `<sound>`, importers otherwise play at 120: a metronome mark's,
+  else the tempo LilyPond's MIDI plays, from the score's `\midi`, a twin
+  score with only a `\midi` (Mutopia's `\unfoldRepeats` copy), or the
+  default 4 = 60, warned about; `--tempo 4=54` sets it per piece: tempo
+  words make poor numbers, e.g. Adagio in cut time),
   final bar lines; metadata into `<work>`, `<identification>`
   (rights = licence — maintainer, source = Mutopia page URL). On both pieces
   music21's reading of the output matches LilyPond's dump note for note
