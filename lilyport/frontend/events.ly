@@ -49,10 +49,12 @@
 %% \cadenzaOn/Off (on: false/true).
 %%
 %% A note's "stem" is the direction its context sets (1 up, -1 down), absent
-%% when LilyPond chooses.
+%% when LilyPond chooses. Notes and rests drawn invisibly (\hideNotes, \omit)
+%% have "visible": false.
 %%
-%% A note inside a chord carries its own tie ("tie": true) and fingerings
-%% ("fingers"), which LilyPond doesn't broadcast as events.
+%% A note inside a chord carries its own tie ("tie": true), \repeatTie
+%% ("repeat_tie": true) and fingerings ("fingers"), which LilyPond doesn't
+%% broadcast as events.
 %%
 %% Pitches are spelled: step (0 = C ... 6 = B), alter (in whole tones, so
 %% 1/2 is a sharp), octave (0 is the octave from middle C up).
@@ -218,6 +220,8 @@ with \\sustainOn, or a turn with the accidentals of its notes."
              (articulations (ly:event-property event 'articulations '()))
              (tied (any (lambda (a) (memq 'tie-event (ly:event-property a 'class)))
                         articulations))
+             (repeat-tied (any (lambda (a) (memq 'repeat-tie-event (ly:event-property a 'class)))
+                               articulations))
              (fingers (filter-map
                        (lambda (a)
                          (and (memq 'fingering-event (ly:event-property a 'class))
@@ -233,12 +237,16 @@ with \\sustainOn, or a turn with the accidentals of its notes."
                     '())
                 (list "duration" (json-duration (ly:event-property event 'duration)))
                 (if tied (list "tie" "true") '())
+                (if repeat-tied (list "repeat_tie" "true") '())
+                (if (lilyport-hidden? ctx 'NoteHead) (list "visible" "false") '())
                 (if (pair? fingers)
                     (list "fingers" (string-append "[" (string-join fingers ",") "]"))
                     '())))))
      ((rest-event engraver event)
-      (emit (ly:translator-context engraver) event "rest"
-            "duration" (json-duration (ly:event-property event 'duration))))
+      (let ((ctx (ly:translator-context engraver)))
+        (apply emit ctx event "rest"
+               "duration" (json-duration (ly:event-property event 'duration))
+               (if (lilyport-hidden? ctx 'Rest) (list "visible" "false") '()))))
      ((multi-measure-rest-event engraver event)
       (emit (ly:translator-context engraver) event "multi-measure-rest"
             "duration" (json-duration (ly:event-property event 'duration))))
@@ -247,6 +255,9 @@ with \\sustainOn, or a turn with the accidentals of its notes."
             "duration" (json-duration (ly:event-property event 'duration))))
      ((tie-event engraver event)
       (emit (ly:translator-context engraver) event "tie"))
+     ;; \repeatTie: tied from the end of the repeated music (a second ending)
+     ((repeat-tie-event engraver event)
+      (emit (ly:translator-context engraver) event "repeat-tie"))
      ((tuplet-span-event engraver event)
       (emit (ly:translator-context engraver) event "tuplet"
             "dir" (event-direction event)))

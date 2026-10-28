@@ -395,12 +395,29 @@ lilyport/
   divided at repeat signs inside them. Checked against LilyPond's unfolded
   MIDI; on Rolls' first batch Für Elise and the Minuet in G match note for
   note.
-- **Found by Rolls' first batch, to fix:** a scaled note followed by a
-  skip (`c'4*1/2 s8`, Rondo alla turca bar 20) is written with a
-  `<time-modification>` and no tuplet: Verovio times it as a quarter and
-  the rest of the piece drifts. The Entertainer drifts from quarter 138 on
-  (not looked into yet). The Gymnopédie's F♯4 in bars 9–11 plays 2 quarters
-  in Verovio, 3 in LilyPond.
+- **Done (found by Rolls' first batch):** a note scaled to last less than
+  drawn, outside tuplets, is written as drawn (readers time a note by its
+  type): `c'4*1/2 s8` (the Rondo alla turca's bar 20, where Verovio's
+  timing drifted) in place, `ef2.*1/2 ef'4.` (Clair de lune's bar 64, a bass
+  held under its voice) in a voice of its own. Notes overlapping in one
+  voice (`<< b2. { s8 <f b>4 ~ <f b>2. } >>` without `\\`, Clair de lune's
+  bar 14) go to voices of their own: MuseScore found those bars too long
+  and called the file corrupted. Notes drawn invisibly (`\hideNotes`) are
+  not written; a tie into one leads, across voices, to the note the hidden
+  note's tie leads to (The Entertainer's bar 69). A tie at the end of the
+  repeated music goes into every ending (`\repeatTie` or not), as LilyPond
+  plays it. On the eleven pieces of Rolls' first batch, MuseScore 4.7.5's
+  importer (the snap's `musescore -o x.mscz x.musicxml`, headless) loads
+  every file; it reports the first bar its sanity check fails, e.g.
+  "Voice too long: measure 64, staff 2, voice 2", in its log
+  (`~/snap/musescore/<rev>/.local/share/MuseScore/MuseScore4/logs/`).
+- **Known differences in the MIDI check:** a tie into a later ending is a
+  stop alone, which Verovio strikes again (The Entertainer, bar 92). Two
+  voices overlapping on one
+  pitch (the Gymnopédie's held F♯4 under chords with F♯4, bars 9–11): one
+  MIDI note, ended differently by LilyPond and Verovio. Graces with unisons
+  (the Rondo's arpeggiated grace chords): the doubled pitches counted
+  differently.
 - **Open:** `\repeat segno`, `\fine`, D.C./D.S. (not written);
   accidentals are left to the importer; scores without `\layout`;
   lyrics and chord names (out of scope for now). Moonlight's source says

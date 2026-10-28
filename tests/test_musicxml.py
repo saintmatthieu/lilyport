@@ -248,7 +248,7 @@ def test_dynamics_lines():
 def test_scaled_durations_and_after_grace():
     root = convert(FIXTURES / "scaled-and-after-grace.ly")
     check_timing(root)
-    first, second, _ = measures(root)
+    first, second, _, fourth = measures(root)
     # a8*2/3 b4*2/3 make one triplet, c d e another: tuplets LilyPond draws
     # no bracket for.
     starts = first.findall("note/notations/tuplet[@type='start']")
@@ -258,6 +258,11 @@ def test_scaled_durations_and_after_grace():
     stream = [(n.findtext("pitch/step"), n.find("grace") is not None) for n in notes(second)]
     assert stream == [("F", False), ("E", True), ("F", True), ("G", False)]
     assert second.find("backup") is None
+    # c4*1/2 s8: the quarter as drawn, lasting until the next note.
+    quarter = notes(fourth)[0]
+    assert (quarter.findtext("type"), quarter.findtext("duration")) == \
+        ("quarter", root.findtext("part/measure/attributes/divisions"))
+    assert quarter.find("time-modification") is None and fourth.find("forward") is None
 
 
 def test_repeats():
@@ -300,3 +305,49 @@ def test_repeats_by_hand():
     assert right.find("ending").get("type") == "stop"
     assert right.find("repeat").get("direction") == "backward"
     assert bars[3].find("barline[@location='right']/ending").get("type") == "discontinue"
+
+
+def test_hidden_tie():
+    score = assemble(dump_events(FIXTURES / "hidden-tie.ly"))
+    assert not score.warnings
+    root = musicxml.to_element(score)
+    check_timing(root)
+    tied = [(n.findtext("voice"), n.findtext("pitch/step"), n.find("tie").get("type"))
+            for n in root.iter("note") if n.find("tie") is not None]
+    # The B flat tied from voice 1 into voice 2 (the G within voice 1); the
+    # hidden note not written.
+    assert sorted(tied) == [("1", "B", "start"), ("1", "G", "start"), ("1", "G", "stop"),
+                            ("2", "B", "stop")]
+    assert len([n for n in root.iter("note") if n.findtext("voice") == "2"]) == 2
+
+
+def test_tie_into_endings():
+    root = convert(FIXTURES / "tie-into-endings.ly")
+    check_timing(root)
+
+    def ties(measure):
+        first = notes(measures(root)[measure])[0]
+        return [t.get("type") for t in first.findall("tie")]
+
+    # Into the first ending as usual, into the second a stop alone.
+    assert ties(2) == ["stop"] and ties(3) == ["stop"]
+    assert ties(6) == ["stop"] and ties(7) == ["stop"]
+
+
+def test_overlap_in_one_voice():
+    root = convert(FIXTURES / "overlap-in-one-voice.ly")
+    check_timing(root)
+    first, second, third = measures(root)
+    # The chords that overlap the B: a voice of their own, from the eighth.
+    voices = [(n.findtext("voice"), n.findtext("pitch/step"), n.find("chord") is not None)
+              for n in notes(first)]
+    assert voices == [("1", "B", False), ("2", "F", False), ("2", "B", True),
+                      ("2", "F", False), ("2", "B", True)]
+    assert first.find("backup") is not None and first.find("forward") is not None
+    # ees2.*1/2: a dotted half, in a voice of its own under the rest of its voice.
+    rest, bass = sorted(notes(second), key=lambda n: int(n.findtext("duration")))
+    assert (bass.findtext("type"), bass.find("dot") is not None) == ("half", True)
+    assert int(bass.findtext("duration")) == 2 * int(rest.findtext("duration"))
+    assert bass.find("time-modification") is None
+    assert bass.findtext("voice") != rest.findtext("voice")
+    assert notes(third)[0].findtext("voice") == "1"

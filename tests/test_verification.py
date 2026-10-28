@@ -16,9 +16,10 @@ FIXTURES = Path(__file__).with_name("fixtures")
 CORPUS = Path(__file__).resolve().parents[1] / ".corpus"
 # Files with several \book blocks name their MIDI files ambiguously.
 NO_MIDI = {"headers.ly"}
-# Repeats set by hand (repeatCommands), which LilyPond plays once: compared
-# with Verovio playing them once too.
-PLAYED_ONCE = {"repeats-by-hand.ly"}
+# Compared with Verovio playing the repeats once: repeats set by hand
+# (repeatCommands), which LilyPond plays once; ties into a second ending,
+# a stop alone, which Verovio strikes again (LilyPond's unfolded MIDI holds).
+PLAYED_ONCE = {"repeats-by-hand.ly", "tie-into-endings.ly"}
 
 try:
     find_lilypond()

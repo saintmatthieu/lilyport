@@ -14,8 +14,12 @@
     shifts the graces before it too);
   - a rolled chord (\\arpeggio; Verovio rolls it, LilyPond doesn't): its
     notes may start up to ARPEGGIO_SPREAD late;
-  - a unison of two voices (one MIDI note), and a note with an articulation
-    (LilyPond plays a staccato half its length): onsets only.
+  - a unison of two voices (one MIDI note), a note with an articulation
+    (LilyPond plays a staccato half its length), and a scaled note (c'4*1/2
+    s8 is written as drawn, lasting until the voice's next note): onsets
+    only;
+  - a note tied from the end of the repeated music (\repeatTie): Verovio
+    ignores a tie with no start, and strikes it again.
 """
 import base64
 import io
@@ -165,6 +169,17 @@ def _unisons(events):
     return unisons
 
 
+def _repeat_tied(events):
+    """Per pitch, the sorted onsets of notes tied with \\repeatTie."""
+    chords = {(e["voice"], tuple(e["t"])) for e in events if e["kind"] == "repeat-tie"}
+    tied = defaultdict(list)
+    for e in events:
+        if e["kind"] == "note" and "pitch" in e and \
+                (e.get("repeat_tie") or (e["voice"], tuple(e["t"])) in chords):
+            tied[_pitch(e)].append(_quarters(e["t"]))
+    return {pitch: sorted(onsets) for pitch, onsets in tied.items()}
+
+
 def midi_differences(lilypond_midi, musicxml_text, events, repeats=True):
     """What differs between LilyPond's MIDI and Verovio's MIDI of our
     MusicXML: a list of readable lines (empty if they agree). events: those
@@ -175,7 +190,10 @@ def midi_differences(lilypond_midi, musicxml_text, events, repeats=True):
     windows = _grace_windows(events)
     unisons = _unisons(events)
     articulated = _onsets(events, "articulation")
+    scaled = sorted(_quarters(e["t"]) for e in events if e["kind"] == "note"
+                    and e["duration"]["factor"] != [1, 1])
     arpeggios = _onsets(events, "arpeggio")
+    repeat_tied = _repeat_tied(events)
 
     def in_window(time):
         return any(start <= time < end for start, end, _ in windows)
@@ -216,12 +234,15 @@ def midi_differences(lilypond_midi, musicxml_text, events, repeats=True):
                 if chord is not None:
                     match, rolled = _near(onsets, chord), True
             if match is None:
-                differences.append(f"quarter {onset:g}, pitch {pitch}: not in LilyPond's MIDI")
+                if _near(repeat_tied.get(pitch, []), onset) is None:
+                    differences.append(
+                        f"quarter {onset:g}, pitch {pitch}: not in LilyPond's MIDI")
                 continue
             expected = left.pop(onsets.index(match))[1]
             loose = expected is None or length is None or rolled or \
                 _near(unisons.get(pitch, []), match) is not None or \
                 _near(articulated, match) is not None or \
+                _near(scaled, match) is not None or \
                 in_window(match + expected - ONSET_TOLERANCE)
             if not loose and abs(expected - length) > LENGTH_TOLERANCE:
                 differences.append(f"quarter {onset:g}, pitch {pitch}: "

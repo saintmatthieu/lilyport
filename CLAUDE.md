@@ -89,6 +89,13 @@ system or base conda Python: use `.venv/`.
   rewrites a score's music (unfolding repeats) must unset it on the
   containers, or LilyPond stops playing at the old length ("Moment is not
   increasing").
+- MuseScore's importer times a note by its `<type>` (a `<time-modification>`
+  without a `<tuplet>` changes nothing) and calls a file corrupted when a
+  voice overruns its bar. The MuseScore snap converts headless
+  (`musescore -o x.mscz x.musicxml`, files under `~/snap/musescore/common/`)
+  and logs which bar failed.
+- In LilyPond `<< a2. { s8 b4 ~ b2 } >>` (no `\\`) stays one voice with
+  overlapping notes; a MusicXML voice can't.
 - Mutopia sources are old (2.10–2.12): run `convert-ly`, then expect removed
   Scheme functions (add them to `compat.ly`) and marks drawn as text markup
   (the listener records each text's glyphs: `pedal.Ped`, `pedal.*`,

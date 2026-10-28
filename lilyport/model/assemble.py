@@ -10,6 +10,8 @@ from .score import (Chord, Clef, Direction, Duration, Key, Measure, Metadata, No
 # Staves under these contexts make one instrument (one MusicXML part).
 INSTRUMENT_GROUPS = {"PianoStaff", "GrandStaff"}
 VOICES_PER_STAFF = 4
+# Voice ids of the lanes of a voice whose notes overlap: voice + LANE * lane.
+LANE = 10 ** 6
 END_OF_TIME = (Fraction(10 ** 9), Fraction(0))
 NATURAL_SEMITONES = [0, 2, 4, 5, 7, 9, 11]
 CLEF_SIGNS = {"clefs.G": "G", "clefs.F": "F", "clefs.C": "C",
@@ -119,6 +121,7 @@ class _Builder:
     def build(self):
         self._parts()
         self.metadata = self._metadata()
+        self._lanes()
         self._voices()
         self._chords()
         self._ties()
@@ -130,7 +133,9 @@ class _Builder:
         self._staff_settings()
         self._time_signatures()
         self._repeat_marks()
+        self._ties_into_endings()
         self._measures()
+        self._scaled_notes()
         self._slur_numbers()
         self._measure_rests()
         self._bar_lines()
@@ -173,6 +178,35 @@ class _Builder:
                 continue
             self.place[line["staff"]] = self.place[staff["staff"]]
 
+    def _lanes(self):
+        """Notes of one voice that overlap (<< b2. { s8 <f b>4 ~ <f b>2. } >>,
+        no \\\\: LilyPond keeps one voice) go to lanes, which become voices of
+        their own, as a MusicXML voice's notes follow one another. The events
+        at a lane's times (ties, marks, beams by their stems) go with it."""
+        chords = defaultdict(dict)  # voice id -> main time -> end
+        for e in self.events:
+            if e["kind"] in ("note", "rest", "multi-measure-rest") and e["voice"] \
+                    and not e["t"][2]:
+                start = _time(e)[0]
+                end = start + _duration(e["duration"]).length
+                chords[e["voice"]][start] = max(chords[e["voice"]].get(start, end), end)
+        lane_of = {}  # (voice id, main time) -> lane's voice id
+        for voice, ends_at in chords.items():
+            ends = []  # each lane's end
+            for start, end in sorted(ends_at.items()):
+                lane = next((i for i, e in enumerate(ends) if e <= start), len(ends))
+                ends[lane:lane + 1] = [end]
+                if lane:
+                    lane_of[(voice, start)] = voice + LANE * lane
+        if not lane_of:
+            return
+        events = []
+        for e in self.events:
+            at = e["stems"][0] if e["kind"] == "beam" else e["t"]
+            lane = lane_of.get((e["voice"], Fraction(at[0], at[1])))
+            events.append(dict(e, voice=lane) if lane else e)
+        self.events = events
+
     # Voices: LilyPond's voice contexts come and go; each gets a number in its
     # part, on its home staff (the one most of its notes are on), shared with
     # voices that don't overlap it in time. Voices with stems up (\voiceOne)
@@ -192,7 +226,7 @@ class _Builder:
                 old = spans.get(e["voice"], (start, end))
                 spans[e["voice"]] = (min(old[0], start), max(old[1], end))
         self.voice = {}  # voice id -> (part, number)
-        taken = defaultdict(list)  # (part id, number) -> spans
+        self.taken = taken = defaultdict(list)  # (part id, number) -> spans
         homes = sorted(staves, key=lambda v: (stems[v].most_common(1)[0][0], spans[v][0], v))
         for voice in homes:
             part, staff = self.place[staves[voice].most_common(1)[0][0]]
@@ -210,9 +244,16 @@ class _Builder:
     def _chords(self):
         self.chords = {}  # (voice id, time) -> Chord
         self.tied = set()  # (voice id, time, pitch) of notes tied to the next
+        self.hidden = defaultdict(list)  # (voice id, time) -> notes drawn invisibly
         for e in self.events:
             kind = e["kind"]
             if kind not in ("note", "rest", "multi-measure-rest") or not e["voice"]:
+                continue
+            if e.get("visible", True) is False:
+                # Written as nothing, like a skip: Orchestrion would make the
+                # player play it (an edition's trick, e.g. a hidden note to
+                # draw a tie from another voice).
+                self.hidden[(e["voice"], _time(e))].append(e)
                 continue
             if kind == "note" and "pitch" not in e:
                 self.unhandled["unpitched note"] += 1
@@ -240,6 +281,8 @@ class _Builder:
                 chord.notes.append(Note(pitch, fingerings=[str(f) for f in e.get("fingers", [])]))
                 if e.get("tie"):
                     self.tied.add((e["voice"], time, pitch))
+                if e.get("repeat_tie"):
+                    chord.notes[-1].tie_stop = True
         self._after_graces()
         for part in self.parts:
             part.chords.sort(key=lambda c: (c.time, c.voice))
@@ -294,21 +337,56 @@ class _Builder:
         return chord
 
     def _ties(self):
+        # Where hidden notes' ties lead: (voice id, time, pitch).
+        hidden_ties = set()
         for e in self.events:
-            if e["kind"] == "tie":
+            key = (e["voice"], _time(e))
+            if e["kind"] == "tie" and key in self.hidden:
+                for note in self.hidden[key]:
+                    hidden_ties.add((e["voice"], (key[1][0] + _duration(note["duration"]).length,
+                                                  Fraction(0)), _pitch(note["pitch"])))
+            elif e["kind"] == "tie":
                 chord = self._chord_at(e)
                 if chord:
                     self.tied.update((e["voice"], chord.time, n.pitch) for n in chord.notes)
+            elif e["kind"] == "repeat-tie":
+                # Tied from the end of the repeated music, which the previous
+                # note (the first ending's last) doesn't know: a stop alone.
+                chord = self._chord_at(e)
+                for note in chord.notes if chord else []:
+                    note.tie_stop = True
+        # A tie with no equal note next in its voice goes to one starting
+        # then in another voice of the staff, if a hidden note's tie leads
+        # there: LilyPond can't draw a tie between voices, editions draw it
+        # from a hidden note (a chord's other notes tie to nothing).
+        starting = defaultdict(list)  # (part, staff, time) -> [(voice id, chord)]
         for voice, chords in self.by_voice.items():
-            for chord, following in zip(chords, chords[1:]):
+            for chord in chords:
+                if any((voice, chord.time, n.pitch) in hidden_ties for n in chord.notes):
+                    starting[(id(self.voice[voice][0]), chord.staff, chord.time)].append(
+                        (voice, chord))
+        for voice, chords in self.by_voice.items():
+            for chord, following in zip(chords, chords[1:] + [None]):
+                tied = matched = 0
                 for note in chord.notes:
                     if (voice, chord.time, note.pitch) not in self.tied:
                         continue
-                    target = next((n for n in following.notes if n.pitch == note.pitch), None)
+                    tied += 1
+                    target = next((n for n in following.notes if n.pitch == note.pitch),
+                                  None) if following else None
                     if target is None:
-                        self.warn(f"a tie from {chord.time[0]} leads to no equal note")
-                        continue
-                    note.tie_start = target.tie_stop = True
+                        end = (chord.time[0] + chord.duration.length, Fraction(0))
+                        target = next((n for other_voice, other in starting[
+                                           (id(self.voice[voice][0]), chord.staff, end)]
+                                       for n in other.notes
+                                       if n.pitch == note.pitch and not n.tie_stop
+                                       and (other_voice, end, n.pitch) in hidden_ties), None)
+                    if target is not None:
+                        note.tie_start = target.tie_stop = True
+                        matched += 1
+                # A chord's tie continues the notes the next chord repeats.
+                if tied and not matched:
+                    self.warn(f"a tie from {chord.time[0]} leads to no equal note")
 
     def _tuplets(self):
         spans = defaultdict(list)  # voice id -> event times, stops first
@@ -359,6 +437,44 @@ class _Builder:
                             member.tuplet_shown = False
                         group = []
                 covered -= ends
+
+    def _scaled_notes(self):
+        """A note scaled to last less than drawn, outside tuplets: a quarter
+        drawn in an eighth's time before a skip (c'4*1/2 s8, the Rondo alla
+        turca), a bass held under what follows in its voice (ef2.*1/2 ef'4.,
+        Clair de lune). Readers time a note by its type (Verovio, MuseScore):
+        written as drawn, in a voice of its own if the next note comes
+        sooner, if it stays in its bar."""
+        bar_ends = [m.start + m.length for m in self.measures]
+        for voice, chords in self.by_voice.items():
+            part = self.voice[voice][0]
+            covered = 0  # tuplets open at this chord
+            mains = [c for c in chords if not c.grace]
+            for chord, following in zip(mains, mains[1:] + [None]):
+                covered += chord.tuplet_starts
+                drawn = Duration(chord.duration.log, chord.duration.dots)
+                start, end = chord.time[0], chord.time[0] + drawn.length
+                bar_end = bar_ends[min(bisect_right(bar_ends, start), len(bar_ends) - 1)]
+                if chord.duration.factor < 1 and not covered and end <= bar_end:
+                    number = chord.voice
+                    if following and following.time[0] < end:
+                        number = self._free_voice(part, chord.staff, start, end)
+                    if number is None:
+                        self.warn(f"no voice free at {start} for a note held under its "
+                                  "voice: its type written as its length")
+                    else:
+                        chord.voice, chord.duration = number, drawn
+                covered -= chord.tuplet_stops
+
+    def _free_voice(self, part, staff, start, end):
+        """A voice number of the staff free from start to end, now taken."""
+        first = (staff - 1) * VOICES_PER_STAFF + 1
+        for number in range(first, first + VOICES_PER_STAFF):
+            spans = self.taken[(id(part), number)]
+            if not any(s < end and start < e for s, e in spans):
+                spans.append((start, end))
+                return number
+        return None
 
     def _beams(self):
         for e in self.events:
@@ -723,6 +839,31 @@ class _Builder:
                    else tuple(value.numbers))
             marks.setdefault(key, [key[0], kind, e["dir"], value])
         self.repeat_marks = sorted(marks.values(), key=lambda m: (m[0], m[2] != 1))
+
+    def _ties_into_endings(self):
+        """A tie at the end of the repeated music goes into every ending
+        (LilyPond plays it so, \\repeatTie or not): a stop alone on the
+        equal notes beginning the later ones."""
+        voltas = [time for time, kind, direction, _ in self.repeat_marks
+                  if kind == "volta" and direction == -1]
+        ends = {time for time, kind, direction, _ in self.repeat_marks
+                if kind == "volta" and direction == 1}
+        for later in (t for t in voltas if t in ends):
+            # The first ending of the set: back through endings that follow
+            # one another.
+            first = later
+            while first in ends and any(t < first for t in voltas):
+                first = max(t for t in voltas if t < first)
+            for chords in self.by_voice.values():
+                body = next((c for c in reversed(chords)
+                             if c.time[0] < first and not c.grace), None)
+                start = next((c for c in chords if c.time == (later, Fraction(0))), None)
+                if body is None or start is None or \
+                        body.time[0] + body.duration.length != first:
+                    continue
+                for note in start.notes:
+                    if any(n.tie_start and n.pitch == note.pitch for n in body.notes):
+                        note.tie_stop = True
 
     def _repeats(self):
         """Repeat signs and volta brackets on their bars' lines."""
