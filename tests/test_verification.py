@@ -9,13 +9,16 @@ import pytest
 from lilyport.frontend.lilypond import dump_events, find_lilypond
 from lilyport.model.assemble import assemble
 from lilyport.writers.musicxml import to_string
-from verify import (ADD_MIDI, SCHEMA, lilypond_midi_files, midi_differences,
-                    schema_errors)
+from verify import (ADD_MIDI, SCHEMA, UNFOLD_REPEATS, lilypond_midi_files,
+                    midi_differences, schema_errors)
 
 FIXTURES = Path(__file__).with_name("fixtures")
 CORPUS = Path(__file__).resolve().parents[1] / ".corpus"
 # Files with several \book blocks name their MIDI files ambiguously.
 NO_MIDI = {"headers.ly"}
+# Repeats set by hand (repeatCommands), which LilyPond plays once: compared
+# with Verovio playing them once too.
+PLAYED_ONCE = {"repeats-by-hand.ly"}
 
 try:
     find_lilypond()
@@ -46,12 +49,20 @@ def test_read_by_others(ly, scores):
         events = dump_events(ly, keep_midi_in=work, settings=[ADD_MIDI])
         midis = [] if ly.name in NO_MIDI else \
             [path.read_bytes() for path in lilypond_midi_files(work, ly.stem)]
+    # Verovio plays the repeats: LilyPond's MIDI (and the events its
+    # comparison reads) from the music unfolded.
+    repeats = ly.name not in PLAYED_ONCE
+    played = events
+    if midis and repeats and any(e["kind"] == "repeat" for e in events):
+        with tempfile.TemporaryDirectory() as work:
+            played = dump_events(ly, keep_midi_in=work, settings=[ADD_MIDI, UNFOLD_REPEATS])
+            midis = [path.read_bytes() for path in lilypond_midi_files(work, ly.stem)]
     problems = []
     for score in scores or sorted({e["score"] for e in events}):
         scored = [e for e in events if e["score"] == score]
         xml = to_string(assemble(scored, score))
         problems += [f"score {score}: {error}" for error in schema_errors(xml)]
         if midis:
-            problems += [f"score {score}: {difference}"
-                         for difference in midi_differences(midis[score - 1], xml, scored)]
+            problems += [f"score {score}: {difference}" for difference in midi_differences(
+                midis[score - 1], xml, [e for e in played if e["score"] == score], repeats)]
     assert not problems, "\n".join(problems[:30])

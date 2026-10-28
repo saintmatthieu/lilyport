@@ -107,12 +107,26 @@ class TimeSignature:
 
 
 @dataclass
+class Volta:
+    """An alternative ending's bracket."""
+    numbers: list[int]   # the passes it is played on: [1], or [1, 2]
+    text: str            # as printed: "1.", "1., 2."
+    closed: bool = True  # ends with a hook (before a repeat sign)
+
+
+@dataclass
 class Measure:
     number: str
     start: Fraction
     length: Fraction
-    implicit: bool = False      # a pickup, or any bar shorter than its time signature
+    # A pickup, a bar shorter than its time signature, or the second part of
+    # a bar a repeat divides: not counted.
+    implicit: bool = False
     right_bar: str | None = None  # LilyPond's bar type: "|.", "||"...
+    repeat_start: bool = False    # a repeated section begins with this bar
+    repeat_end: int = 0           # one ends with it, played this many times
+    volta_start: Volta | None = None
+    volta_stop: Volta | None = None
 
 
 @dataclass

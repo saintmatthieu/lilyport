@@ -28,6 +28,7 @@ from pathlib import Path
 
 SCHEMA = Path(__file__).resolve().parents[1] / ".corpus" / "musicxml-4.0" / "musicxml.xsd"
 ADD_MIDI = Path(__file__).with_name("support") / "add-midi.ly"
+UNFOLD_REPEATS = Path(__file__).with_name("support") / "unfold-repeats.ly"
 # Verovio writes 120 ticks a quarter, and ends each note a tick early.
 ONSET_TOLERANCE = 0.0125
 LENGTH_TOLERANCE = 0.02
@@ -69,11 +70,13 @@ def midi_notes(data):
     return notes
 
 
-def verovio_midi(xml_text):
-    """Verovio's MIDI of a MusicXML document. Verovio runs in a child process:
-    it crashes now and then after many documents in one."""
+def verovio_midi(xml_text, repeats=True):
+    """Verovio's MIDI of a MusicXML document, its repeats played (or played
+    once). Verovio runs in a child process: it crashes now and then after
+    many documents in one."""
     script = ("import base64, sys, verovio\n"
               "toolkit = verovio.toolkit()\n"
+              f"toolkit.setOptions({{'expandNever': {not repeats}}})\n"
               "if not toolkit.loadData(sys.stdin.read()):\n"
               "    sys.exit('Verovio could not read the MusicXML')\n"
               "sys.stdout.write(toolkit.renderToMIDI())\n")
@@ -162,10 +165,12 @@ def _unisons(events):
     return unisons
 
 
-def midi_differences(lilypond_midi, musicxml_text, events):
+def midi_differences(lilypond_midi, musicxml_text, events, repeats=True):
     """What differs between LilyPond's MIDI and Verovio's MIDI of our
-    MusicXML: a list of readable lines (empty if they agree)."""
-    ours = midi_notes(verovio_midi(musicxml_text))
+    MusicXML: a list of readable lines (empty if they agree). events: those
+    of LilyPond's run that wrote the MIDI; repeats: whether Verovio plays
+    them (LilyPond's MIDI then has them unfolded)."""
+    ours = midi_notes(verovio_midi(musicxml_text, repeats))
     theirs = midi_notes(lilypond_midi)
     windows = _grace_windows(events)
     unisons = _unisons(events)

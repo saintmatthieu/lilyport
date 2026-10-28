@@ -168,6 +168,14 @@ class _PartWriter:
         keys = self.in_measure(part.keys, measure)
         times = self.in_measure(self.score.time_signatures, measure)
         at_start = lambda items: [i for i in items if i.time[0] == start]
+        if measure.repeat_start or measure.volta_start:
+            barline = ET.SubElement(element, "barline", location="left")
+            if measure.repeat_start:
+                _text(barline, "bar-style", "heavy-light")
+            if measure.volta_start:
+                self.ending(barline, measure.volta_start, "start")
+            if measure.repeat_start:
+                ET.SubElement(barline, "repeat", direction="forward")
         self.attributes(element, at_start(keys), at_start(times), at_start(clefs), first)
 
         # Staff-wide changes inside the bar go into the stream at their time.
@@ -214,9 +222,25 @@ class _PartWriter:
                 else:  # a key
                     self.attributes(element, [item], [], [], False)
 
-        if measure.right_bar in BAR_STYLES:
+        style = "light-heavy" if measure.repeat_end else BAR_STYLES.get(measure.right_bar)
+        if style or measure.volta_stop:
             barline = ET.SubElement(element, "barline", location="right")
-            _text(barline, "bar-style", BAR_STYLES[measure.right_bar])
+            if style:
+                _text(barline, "bar-style", style)
+            if measure.volta_stop:
+                self.ending(barline, measure.volta_stop,
+                            "stop" if measure.volta_stop.closed else "discontinue")
+            if measure.repeat_end:
+                ET.SubElement(barline, "repeat", direction="backward",
+                              **({"times": str(measure.repeat_end)}
+                                 if measure.repeat_end != 2 else {}))
+
+    def ending(self, barline, volta, kind):
+        number = ", ".join(str(n) for n in volta.numbers)
+        if kind == "start":
+            _text(barline, "ending", volta.text, number=number, type=kind)
+        else:
+            ET.SubElement(barline, "ending", number=number, type=kind)
 
     def move(self, element, cursor, target):
         if target > cursor:

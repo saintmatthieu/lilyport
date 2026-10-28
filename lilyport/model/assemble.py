@@ -5,7 +5,7 @@ from collections import Counter, defaultdict
 from fractions import Fraction
 
 from .score import (Chord, Clef, Direction, Duration, Key, Measure, Metadata, Note, Part,
-                    Pitch, Score, TimeSignature)
+                    Pitch, Score, TimeSignature, Volta)
 
 # Staves under these contexts make one instrument (one MusicXML part).
 INSTRUMENT_GROUPS = {"PianoStaff", "GrandStaff"}
@@ -70,6 +70,14 @@ def _text_fingerings(text):
     return text.split()
 
 
+def _volta_text(numbers):
+    """A volta's label as LilyPond prints it: "1.", "1., 2.", "1.–3."."""
+    numbers = sorted(numbers)
+    if len(numbers) > 2 and numbers == list(range(numbers[0], numbers[-1] + 1)):
+        return f"{numbers[0]}.–{numbers[-1]}."
+    return ", ".join(f"{n}." for n in numbers)
+
+
 def _time(e):
     t = e["t"]
     return (Fraction(t[0], t[1]), Fraction(t[2], t[3]))
@@ -121,10 +129,12 @@ class _Builder:
         self._octave_shifts()
         self._staff_settings()
         self._time_signatures()
+        self._repeat_marks()
         self._measures()
         self._slur_numbers()
         self._measure_rests()
         self._bar_lines()
+        self._repeats()
         self._starting_tempo()
         for kind, count in sorted(self.unhandled.items()):
             self.warn(f"{count} {kind} event(s) not written yet")
@@ -450,7 +460,7 @@ class _Builder:
                                     tempo_unit=unit, tempo_count=count, sound_tempo=sound)
                 else:  # hidden: only its playback
                     self._direction(e, "tempo", sound_tempo=sound)
-            elif kind in ("una-corda", "tremolo", "breathe", "glissando", "repeat-commands",
+            elif kind in ("una-corda", "tremolo", "breathe", "glissando", "repeat-command",
                           "skip"):
                 if kind != "skip":
                     self.unhandled[kind] += 1
@@ -604,13 +614,27 @@ class _Builder:
             while filled[-1] + nominal < following and \
                     not any(on == start for on, _ in cadenzas):
                 filled.append(filled[-1] + nominal)
+        # A repeat or a volta inside a bar (one that ends after an upbeat)
+        # divides it: in MusicXML they are at measure boundaries. The second
+        # part is implicit, the bar keeps its number. Not inside a note (a
+        # repeat set by hand there): _repeats drops it with a warning.
+        sounding = [(c.time[0], c.time[0] + c.duration.length) for p in self.parts
+                    for c in p.chords if not c.grace]
+        splits = {t for t, *_ in self.repeat_marks if filled[0] < t < end
+                  and not any(s < t < e for s, e in sounding)} - set(filled)
+        bars = filled
+        filled = sorted(set(filled) | splits)
         self.measures = []
         previous = None
         used = Counter()
         for start, following in zip(filled, filled[1:] + [end]):
-            number = numbers.get(start, previous + 1 if previous is not None else 1)
             length = following - start
-            implicit = length < self._nominal_length(start)
+            if start in splits:
+                number, implicit = previous, True
+            else:
+                number = numbers.get(start, previous + 1 if previous is not None else 1)
+                bar_end = next((b for b in bars if b > start), end)
+                implicit = bar_end - start < self._nominal_length(start)
             # LilyPond numbers the bar after a cadenza like the cadenza's.
             label = str(number) + ("" if not used[number] else "abcdefghij"[used[number] - 1])
             used[number] += 1
@@ -676,6 +700,67 @@ class _Builder:
                 ends[at].right_bar = e["type"]
             elif at != 0:
                 self.warn(f"bar {e['bar']}: a {e['type']!r} bar line inside a bar: dropped")
+
+    def _repeat_marks(self):
+        """The score's repeat starts and ends and volta brackets, in time
+        order (ends first), each once: [main time, kind, dir, count or volta]."""
+        marks = {}
+        for e in self.events:
+            kind = e["kind"]
+            if kind == "repeat":
+                value = e.get("count")
+            elif kind == "volta" and e["dir"] == -1:
+                if "numbers" in e:
+                    value = Volta(e["numbers"], _volta_text(e["numbers"]))
+                else:  # set by hand (repeatCommands): its text as printed
+                    value = Volta([int(n) for n in re.findall(r"\d+", e["text"])], e["text"])
+            elif kind == "volta":
+                value = tuple(e.get("numbers", ()))
+            else:
+                continue
+            # Each staff ends a bracket at its own grace time: by main time.
+            key = (_time(e)[0], kind, e["dir"], value if kind == "repeat" or e["dir"] == 1
+                   else tuple(value.numbers))
+            marks.setdefault(key, [key[0], kind, e["dir"], value])
+        self.repeat_marks = sorted(marks.values(), key=lambda m: (m[0], m[2] != 1))
+
+    def _repeats(self):
+        """Repeat signs and volta brackets on their bars' lines."""
+        starts = {m.start: m for m in self.measures}
+        ends = {m.start + m.length: m for m in self.measures}
+        # LilyPond draws no repeat sign at the start of the score unless the
+        # source asks for one (\bar ".|:" there).
+        initial = any(e["kind"] == "bar-line" and ":" in e["type"] and _time(e)[0] == 0
+                      for e in self.events)
+        repeat_times = {time for time, kind, *_ in self.repeat_marks if kind == "repeat"}
+        voltas = []
+        for time, kind, direction, value in self.repeat_marks:
+            measure = (starts if direction == -1 else ends).get(time)
+            if measure is None:
+                self.warn(f"a {kind} {'start' if direction == -1 else 'end'} at {time} "
+                          "is at no bar line: dropped")
+            elif kind == "repeat" and direction == -1:
+                if time != self.measures[0].start or initial:
+                    measure.repeat_start = True
+            elif kind == "repeat":
+                # count: the times played again from here (\alternative's
+                # first ending: 1); LilyPond's default, once.
+                measure.repeat_end = (value or 1) + 1
+            elif direction == -1:
+                measure.volta_start = value
+                voltas.append(value)
+            elif voltas:
+                volta = next((v for v in reversed(voltas) if tuple(v.numbers) == value),
+                             voltas[-1])
+                voltas.remove(volta)
+                # Open-ended unless a repeat sign or a double bar line ends it.
+                volta.closed = time in repeat_times or (measure.right_bar or "") not in PLAIN_BARS
+                measure.volta_stop = volta
+        for volta in voltas:
+            self.warn(f"a volta {volta.text!r} never ends: dropped")
+            for measure in self.measures:
+                if measure.volta_start is volta:
+                    measure.volta_start = None
 
     def _starting_tempo(self):
         """Without a tempo mark at the start: the heading LilyPond prints above

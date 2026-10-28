@@ -38,6 +38,10 @@
 %%
 %% "playback" gives the tempo LilyPond's MIDI starts at (wholes_per_minute).
 %%
+%% Repeats: "repeat" (dir -1 a start, 1 an end; "count" the times played
+%% from a start, or gone back from an end), "volta" (dir -1 a bracket's start,
+%% with its "numbers" from \alternative or its "text" set by hand; 1 its end).
+%%
 %% Each staff announces itself once (kind "staff": its name, the context it
 %% is in, e.g. a PianoStaff, its order of creation, and its instrument name),
 %% and so does each Dynamics line ("dynamics": true), whose events carry its
@@ -479,7 +483,8 @@ an inner field hiding an outer one; markups as their text."
 %% The score: time, tempo, bar lines and repeats, and the header.
 
 #(define (lilyport-score-engraver context)
-   (let ((time #f) (bar-type #f) (scopes #f) (midi-tempo #f) (timing #t))
+   (let ((time #f) (bar-type #f) (scopes #f) (midi-tempo #f) (timing #t)
+         (volta-moment #f) (voltas-seen '()))
      (make-engraver
       ((initialize engraver)
        (set! lilyport-score-number (1+ lilyport-score-number))
@@ -517,11 +522,37 @@ an inner field hiding an outer one; markups as their text."
                                         'style)))))
          (if (and (string? which) (not (string-null? which)))
              (emit context #f "bar-line" "type" (json-string which)))
-         (if (pair? repeats)
-             (emit context #f "repeat-commands"
-                   "commands"
-                   (json-string (format #f "~s" repeats))))))
+         ;; Set by \repeat volta (start and end), or by hand (voltas too).
+         (for-each
+          (lambda (command)
+            (let ((name (if (pair? command) (car command) command))
+                  (args (if (pair? command) (cdr command) '())))
+              (case name
+                ((start-repeat end-repeat)
+                 (apply emit context #f "repeat" "dir" (if (eq? name 'start-repeat) "-1" "1")
+                        (if (and (pair? args) (integer? (car args)))
+                            (list "count" (json-number (car args)))
+                            '())))
+                ((volta)
+                 (if (and (pair? args) (car args))
+                     (emit context #f "volta" "dir" "-1" "text" (json-markup (car args)))
+                     (emit context #f "volta" "dir" "1")))
+                (else (emit context #f "repeat-command" "name" (json-symbol name))))))
+          (if (list? repeats) repeats '()))))
       (listeners
+       ;; \alternative's brackets; each staff sends its copy, recorded once.
+       ((volta-span-event engraver event)
+        (let ((dir (ly:event-property event 'span-direction))
+              (numbers (ly:event-property event 'volta-numbers '()))
+              (now (json-moment (ly:context-current-moment context))))
+          (if (not (equal? now volta-moment))
+              (begin (set! volta-moment now) (set! voltas-seen '())))
+          (if (not (member (cons dir numbers) voltas-seen))
+              (begin
+                (set! voltas-seen (cons (cons dir numbers) voltas-seen))
+                (emit context event "volta" "dir" (json-number dir)
+                      "numbers" (string-append
+                                 "[" (string-join (map json-number numbers) ",") "]"))))))
        ((tempo-change-event engraver event)
         (let ((unit (ly:event-property event 'tempo-unit #f))
               (count (ly:event-property event 'metronome-count #f))

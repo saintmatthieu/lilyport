@@ -82,6 +82,13 @@ system or base conda Python: use `.venv/`.
 - `\afterGrace` notes come at a moment inside their main note; lilyport
   moves them before the next note.
 - LilyPond 2.25+ deprecates `timeSignatureFraction` for `timeSignature`.
+- `\repeat volta`'s starts and ends reach the Score's `repeatCommands`, but
+  `\alternative`'s brackets only as `volta-span-event`s (one per staff).
+  Repeat bar lines are not in `whichBar`.
+- Music the parser has built caches its `length`: a settings file that
+  rewrites a score's music (unfolding repeats) must unset it on the
+  containers, or LilyPond stops playing at the old length ("Moment is not
+  increasing").
 - Mutopia sources are old (2.10–2.12): run `convert-ly`, then expect removed
   Scheme functions (add them to `compat.ly`) and marks drawn as text markup
   (the listener records each text's glyphs: `pedal.Ped`, `pedal.*`,

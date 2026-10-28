@@ -39,7 +39,8 @@ def check_timing(root):
     time signatures."""
     divisions = int(root.find("part/measure/attributes/divisions").text)
     beats = None
-    for measure in measures(root):
+    bars = measures(root)
+    for measure, following in zip(bars, bars[1:] + [None]):
         time = measure.find("attributes/time")
         if time is not None:
             beats = Fraction(int(time.findtext("beats")) * 4, int(time.findtext("beat-type")))
@@ -53,7 +54,10 @@ def check_timing(root):
                 cursor += duration
             assert cursor >= 0, measure.get("number")
             longest = max(longest, cursor)
-        if measure.get("implicit") != "yes" and measure.find("note/rest[@measure]") is None:
+        # The first part of a bar a repeat divides is short (the second is implicit).
+        divided = following is not None and following.get("implicit") == "yes"
+        if measure.get("implicit") != "yes" and measure.find("note/rest[@measure]") is None \
+                and not divided:
             assert longest >= beats * divisions or measure.get("number").endswith("a"), \
                 measure.get("number")
 
@@ -254,3 +258,45 @@ def test_scaled_durations_and_after_grace():
     stream = [(n.findtext("pitch/step"), n.find("grace") is not None) for n in notes(second)]
     assert stream == [("F", False), ("E", True), ("F", True), ("G", False)]
     assert second.find("backup") is None
+
+
+def test_repeats():
+    root = convert(FIXTURES / "repeats.ly")
+    check_timing(root)
+    bars = {m.get("number"): m for m in measures(root)}
+
+    def barline(number, location):
+        element = bars[number].find(f"barline[@location='{location}']")
+        if element is None:
+            return None
+        return [(c.tag, c.get("direction") or c.get("type"), c.get("number"), c.get("times"))
+                for c in element if c.tag != "bar-style"]
+
+    # No repeat sign at the start of the score; alternative endings.
+    assert barline("1", "left") is None
+    assert barline("3", "left") == [("ending", "start", "1", None)]
+    assert bars["3"].findtext("barline/ending") == "1."
+    assert barline("3", "right") == [("ending", "stop", "1", None),
+                                     ("repeat", "backward", None, None)]
+    assert barline("4", "right") == [("ending", "discontinue", "2", None)]
+    # After an upbeat: the bar divided at the repeat signs, its second part implicit.
+    assert [(n, bars[n].get("implicit")) for n in ("5", "5a", "7", "7a")] == \
+        [("5", None), ("5a", "yes"), ("7", None), ("7a", "yes")]
+    assert barline("5a", "left") == [("repeat", "forward", None, None)]
+    assert barline("7", "right") == [("repeat", "backward", None, None)]
+    # Played three times, the first ending twice.
+    assert barline("9", "right") == [("ending", "stop", "1, 2", None),
+                                     ("repeat", "backward", None, "3")]
+    assert bars["9"].findtext("barline/ending") == "1., 2."
+
+
+def test_repeats_by_hand():
+    root = convert(FIXTURES / "repeats-by-hand.ly")
+    check_timing(root)
+    bars = measures(root)
+    assert bars[1].find("barline[@location='left']/repeat").get("direction") == "forward"
+    assert bars[2].findtext("barline/ending") == "1"
+    right = bars[2].find("barline[@location='right']")
+    assert right.find("ending").get("type") == "stop"
+    assert right.find("repeat").get("direction") == "backward"
+    assert bars[3].find("barline[@location='right']/ending").get("type") == "discontinue"

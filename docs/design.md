@@ -96,10 +96,12 @@ https://github.com/uliska/ly2xml , https://github.com/lasconic/lilypond_export
 ### Known hard parts
 
 - **Repeats and voltas must stay repeats** (Orchestrion needs the structure, not an
-  unfolded pass). The event stream plays a `\repeat volta` once; repeat bar lines and
-  volta brackets surface as context property changes (`repeatCommands`) — listen for
-  those, or read the `RepeatedMusic` expression before iteration. `\repeat unfold`
-  should come out unfolded.
+  unfolded pass). The event stream plays a `\repeat volta` once; its starts and
+  ends surface in the Score's `repeatCommands` (with those set by hand, voltas
+  included), `\alternative`'s brackets as `volta-span-event`s (2.23+), one per
+  staff. A repeat sign inside a bar (a section after an upbeat) divides the
+  bar: MusicXML has them at measure boundaries, the second part implicit.
+  `\repeat unfold` comes out unfolded.
 - **Grace notes** have zero main duration and a grace offset; MusicXML wants
   `<grace/>` notes before the main note, slash for acciaccaturas.
 - **Tuplets** (incl. odd groupings in Chopin-style runs) → `<time-modification>` +
@@ -218,7 +220,9 @@ out.
   (`pip install verovio`; `toolkit.loadFile(...)`, `toolkit.renderToMIDI()`; headless,
   fast) and compare note by note (pitch, onset, duration, per staff/channel) with
   `mido`. Normalise tempo and velocities; compare onsets in beats. Repeats: compare
-  against LilyPond's MIDI with `\unfoldRepeats`.
+  against LilyPond's MIDI with `\unfoldRepeats` (`tests/support/unfold-repeats.ly`;
+  repeats set by hand with `repeatCommands` it can't unfold: Verovio plays
+  them once instead).
   - **Ornaments:** plain LilyPond MIDI plays a trill as its written note (unless
     `articulate.ly` is used), and so does Verovio, so the diff compares written notes.
     Ornament markings are checked by the structured comparison below.
@@ -386,7 +390,18 @@ lilyport/
   staves, marks) as a test; check both pieces in Orchestrion's
   Debug build; `\cresc` as words + dashes; dynamics in markups
   (`\markup \dynamic pp`) are written as words.
-- **Open:** repeat structure (`repeatCommands` is recorded, not written);
+- **Done:** repeats: `\repeat volta` and `repeatCommands` as repeat bar
+  lines (`times` when played more than twice) and `<ending>` brackets, bars
+  divided at repeat signs inside them. Checked against LilyPond's unfolded
+  MIDI; on Rolls' first batch Für Elise and the Minuet in G match note for
+  note.
+- **Found by Rolls' first batch, to fix:** a scaled note followed by a
+  skip (`c'4*1/2 s8`, Rondo alla turca bar 20) is written with a
+  `<time-modification>` and no tuplet: Verovio times it as a quarter and
+  the rest of the piece drifts. The Entertainer drifts from quarter 138 on
+  (not looked into yet). The Gymnopédie's F♯4 in bars 9–11 plays 2 quarters
+  in Verovio, 3 in LilyPond.
+- **Open:** `\repeat segno`, `\fine`, D.C./D.S. (not written);
   accidentals are left to the importer; scores without `\layout`;
   lyrics and chord names (out of scope for now). Moonlight's source says
   `\key e \major` (written as such: C♯ minor isn't declared).
