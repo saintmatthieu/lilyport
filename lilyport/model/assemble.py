@@ -76,6 +76,11 @@ def _time(e):
     return (Fraction(t[0], t[1]), Fraction(t[2], t[3]))
 
 
+def _remove(items, item):
+    """Removes this very item (dataclasses compare equal by value)."""
+    del items[next(i for i, x in enumerate(items) if x is item)]
+
+
 def _pitch(p):
     alter = Fraction(p["alter"]).limit_denominator(64) * 2
     return Pitch(p["step"], alter, p["octave"] + 4)
@@ -120,6 +125,7 @@ class _Builder:
         self._tuplets()
         self._beams()
         self._marks()
+        self._hairpins()
         self._pedals()
         self._octave_shifts()
         self._staff_settings()
@@ -129,6 +135,7 @@ class _Builder:
         self._measures()
         self._scaled_notes()
         self._slur_numbers()
+        self._hairpin_numbers()
         self._measure_rests()
         self._bar_lines()
         self._repeats()
@@ -551,12 +558,6 @@ class _Builder:
                 else:
                     self._direction(e, "words", text=" ".join(e["text"].split()),
                                     placement={1: "above", -1: "below"}.get(e["dir"]))
-            elif kind == "dynamic":
-                self._direction(e, "dynamic", text=e["text"])
-            elif kind in ("crescendo", "decrescendo"):
-                wedge = "stop" if e["dir"] == 1 else \
-                        "crescendo" if kind == "crescendo" else "diminuendo"
-                self._direction(e, "wedge", type=wedge)
             elif kind == "sustain":
                 self._direction(e, "pedal", type="stop" if e["dir"] == 1 else "start")
             elif kind == "tempo":
@@ -572,6 +573,50 @@ class _Builder:
                           "skip"):
                 if kind != "skip":
                     self.unhandled[kind] += 1
+
+    def _hairpins(self):
+        """Pairs each hairpin's start with its end in its own voice, as
+        LilyPond does: a \\!, an absolute dynamic, or the voice's next hairpin
+        ends it (an end then written where the next begins). Numbers come once
+        the bars are known (_hairpin_numbers)."""
+        self.hairpins = []  # [part, start direction, stop direction]
+        order = {"stop": 0, "dynamic": 1, "start": 2}
+
+        def role(e):
+            if e["kind"] == "dynamic":
+                return "dynamic"
+            return "stop" if e["dir"] == 1 else "start"
+
+        events = sorted(
+            (e for e in self.events if e["kind"] in ("crescendo", "decrescendo", "dynamic")),
+            key=lambda e: (_time(e), order[role(e)]))
+        open_hairpins = {}  # voice id -> (start event, start direction)
+
+        def end(voice, e):
+            start_event, start = open_hairpins.pop(voice)
+            stop = self._direction(dict(start_event, t=e["t"]), "wedge", type="stop")
+            self.hairpins.append([self._part_of(start_event), start, stop])
+
+        for e in events:
+            voice, kind = e["voice"], role(e)
+            if kind == "stop":
+                if voice in open_hairpins:
+                    end(voice, e)
+                else:
+                    self.warn(f"bar {e['bar']}: a hairpin ends that didn't start: dropped")
+            elif kind == "dynamic":
+                self._direction(e, "dynamic", text=e["text"])
+                if voice in open_hairpins:
+                    end(voice, e)
+            else:
+                if voice in open_hairpins:
+                    end(voice, e)
+                wedge = "crescendo" if e["kind"] == "crescendo" else "diminuendo"
+                open_hairpins[voice] = (e, self._direction(e, "wedge", type=wedge))
+        for start_event, start in open_hairpins.values():
+            # LilyPond draws none either ("unterminated hairpin").
+            self.warn(f"bar {start_event['bar']}: a hairpin that never ends: dropped")
+            _remove(self._part_of(start_event).directions, start)
 
     def _octave_shifts(self):
         """\\ottava #1 then #2 is one shift ending where the next begins."""
@@ -632,11 +677,15 @@ class _Builder:
             self._direction(e, "words", text=" ".join(words),
                             placement={1: "above", -1: "below"}.get(e["dir"]))
 
+    def _place_of(self, e):
+        # A score-wide event (tempo): the first staff.
+        return self.place.get(e["staff"], (self.parts[0], 1))
+
+    def _part_of(self, e):
+        return self._place_of(e)[0]
+
     def _direction(self, e, kind, **fields):
-        if e["staff"] in self.place:
-            part, staff = self.place[e["staff"]]
-        else:  # a score-wide event (tempo): the first staff
-            part, staff = self.parts[0], 1
+        part, staff = self._place_of(e)
         # A Dynamics line's marks go where the line is, whatever their ^ or _:
         # it is drawn between (or under) the staves.
         if e["staff"] in self.placement:
@@ -646,7 +695,9 @@ class _Builder:
         # time order, as MuseScore pairs them in file order.
         if kind not in ("pedal", "octave-shift") and e["voice"] in self.voice and self.voice[e["voice"]][0] is part:
             voice = self.voice[e["voice"]][1]
-        part.directions.append(Direction(_time(e), staff, voice, kind, **fields))
+        direction = Direction(_time(e), staff, voice, kind, **fields)
+        part.directions.append(direction)
+        return direction
 
     def _staff_settings(self):
         for e in self.events:
@@ -754,32 +805,60 @@ class _Builder:
             self.measures[1].number = self.measures[0].number
             self.measures[0].number = str(int(self.measures[0].number) - 1)
 
-    def _slur_numbers(self):
-        """Importers pair slurs by number, in file order, in the whole part;
-        a bar is written voice by voice. So a number is reused in a voice once
-        its slur has ended, in another voice once its slur's bars are past."""
+    def _span_numbers(self, spans, what):
+        """Numbers for spans [(part, lane, start time, stop time or None)] as
+        importers pair them: by number, in file order, in the whole part; a
+        bar is written voice by voice (a lane: one pass of the writer). So a
+        number is reused in a lane once its span has ended, in another lane
+        once its span's bars are past. Yields each span's number, or None
+        when 16 are in use."""
         starts = [m.start for m in self.measures]
 
-        def bar(chord):
-            return bisect_right(starts, chord.time[0]) - 1
+        def bar(time):
+            return bisect_right(starts, time[0]) - 1
 
-        numbered = []  # (part, voice, start time, stop time, first bar, last bar, number)
-        for part, voice, start, stop in sorted(self.slurs, key=lambda s: s[2].time):
+        numbered = []  # (part, lane, start time, stop time, first bar, last bar, number)
+        for part, lane, start, stop in spans:
             first = bar(start)
             last = bar(stop) if stop else len(starts)
-            end = stop.time if stop else END_OF_TIME
+            end = stop or END_OF_TIME
             busy = {n for p, v, s, e, f, l, n in numbered if p is part and (
-                (v == voice and s < end and start.time < e) or
-                (v != voice and f <= last and first <= l))}
+                (v == lane and s < end and start < e) or
+                (v != lane and f <= last and first <= l))}
             number = next((n for n in range(1, 17) if n not in busy), None)
             if number is None:
-                self.warn(f"more than 16 slurs at once at {start.time[0]}: one dropped")
+                self.warn(f"more than 16 {what} at once at {start[0]}: one dropped")
+            else:
+                numbered.append((part, lane, start, end, first, last, number))
+            yield number
+
+    def _slur_numbers(self):
+        slurs = sorted(self.slurs, key=lambda s: s[2].time)
+        spans = [(part, voice, start.time, stop.time if stop else None)
+                 for part, voice, start, stop in slurs]
+        for (_, _, start, stop), number in zip(slurs, self._span_numbers(spans, "slurs")):
+            if number is None:
                 continue
-            numbered.append((part, voice, start.time, end, first, last, number))
             start.slurs.append(("start", number))
             if stop:
                 # A slur ending where another begins: the end first.
                 stop.slurs.insert(0, ("stop", number))
+
+    def _hairpin_numbers(self):
+        """Hairpins of different voices overlap (Mutopia's spacer voices
+        carrying one "to give it a nicer length"): each needs a number of its
+        own, on its start and its end."""
+        hairpins = sorted(self.hairpins, key=lambda h: h[1].time)
+        # Directions of no voice are written with the first voice of their staff.
+        spans = [(part, (start.voice, start.staff if not start.voice else 0),
+                  start.time, stop.time) for part, start, stop in hairpins]
+        for (part, start, stop), number in zip(hairpins,
+                                               self._span_numbers(spans, "hairpins")):
+            if number is None:
+                _remove(part.directions, start)
+                _remove(part.directions, stop)
+            else:
+                start.number = stop.number = number
 
     def _measure_rests(self):
         for part in self.parts:

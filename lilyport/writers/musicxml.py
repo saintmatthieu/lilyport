@@ -396,7 +396,8 @@ class _PartWriter:
         elif direction.kind == "words":
             _text(kind_element, "words", direction.text)
         elif direction.kind == "wedge":
-            ET.SubElement(kind_element, "wedge", type=direction.type)
+            ET.SubElement(kind_element, "wedge", type=direction.type,
+                          number=str(direction.number or 1))
         elif direction.kind == "octave-shift":
             ET.SubElement(kind_element, "octave-shift", type=direction.type, number="1",
                           **({"size": str(direction.size)} if direction.type != "stop" else {}))

@@ -390,8 +390,9 @@ lilyport/
   warns of ties leading nowhere there.
 - **Next:** the structured comparison through music21 (spelling, voices,
   staves, marks) as a test; check both pieces in Orchestrion's
-  Debug build; `\cresc` as words + dashes; dynamics in markups
-  (`\markup \dynamic pp`) are written as words.
+  Debug build; `\cresc` as words + dashes (also a hairpin drawn as text,
+  `decrescendoSpanner = #'text`: Chopin Op. 28 No. 4's "stretto", now a
+  wedge); dynamics in markups (`\markup \dynamic pp`) are written as words.
 - **Done:** repeats: `\repeat volta` and `repeatCommands` as repeat bar
   lines (`times` when played more than twice) and `<ending>` brackets, bars
   divided at repeat signs inside them. Checked against LilyPond's unfolded
@@ -413,6 +414,17 @@ lilyport/
   every file; it reports the first bar its sanity check fails, e.g.
   "Voice too long: measure 64, staff 2, voice 2", in its log
   (`~/snap/musescore/<rev>/.local/share/MuseScore/MuseScore4/logs/`).
+- **Done (found by Orchestrion's Debug build on Rolls' Chopin Op. 28 No.
+  4):** hairpins numbered. Each start is paired with its end in its own
+  LilyPond voice, as LilyPond does (a `\!`, an absolute dynamic, or the
+  voice's next hairpin ends it; a stray `\!` is dropped with a warning),
+  and gets a `number` no other hairpin uses while open in the part, the same
+  rule as slurs. Without numbers, hairpins of different voices overlapping on
+  one staff (Mutopia's spacer voices carrying one "to give [it] a nicer
+  length") paired wrongly in MuseScore, which asserts on a hairpin ending
+  before it starts. Of the 155 Rolls work pieces that convert, 32 paired
+  wrongly before, none after (MuseScore's pairing replayed by
+  `tests/test_musicxml.py`'s `wedges`).
 - **Known differences in the MIDI check:** a tie into a later ending is a
   stop alone, which Verovio strikes again (The Entertainer, bar 92). Two
   voices overlapping on one

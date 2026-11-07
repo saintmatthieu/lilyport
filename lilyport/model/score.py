@@ -75,6 +75,7 @@ class Direction:
     type: str = ""    # wedge: "crescendo"/"diminuendo"/"stop"; pedal: "start"/"stop";
                       # octave-shift: "down" (8va: drawn lower), "up", "stop"
     size: int = 0     # octave-shift: 8, 15, 22
+    number: int = 0   # wedge: pairs a start with its stop (1-16)
     placement: str | None = None  # "above"/"below"
     tempo_unit: Duration | None = None
     tempo_count: Fraction | None = None

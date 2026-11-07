@@ -366,3 +366,51 @@ def test_overlap_in_one_voice():
     assert bass.find("time-modification") is None
     assert bass.findtext("voice") != rest.findtext("voice")
     assert notes(third)[0].findtext("voice") == "1"
+
+
+def wedges(root):
+    """The hairpins as MuseScore's importer pairs them: by number, in file
+    order, in the whole part. Fails on a start whose number is still open, a
+    stop with none open, an end before its start, or one never ended.
+    Returns [(start, stop, type)] in quarter notes."""
+    divisions = int(root.find("part/measure/attributes/divisions").text)
+    pairs = []
+    for part in root.findall("part"):
+        open_wedges = {}
+        start = 0
+        for measure in part.findall("measure"):
+            cursor = longest = 0
+            for element in measure:
+                duration = Fraction(int(element.findtext("duration") or 0), divisions)
+                if element.tag == "backup":
+                    cursor -= duration
+                elif element.tag == "forward" or (element.tag == "note"
+                                                  and element.find("chord") is None):
+                    cursor += duration
+                longest = max(longest, cursor)
+                for wedge in element.iter("wedge"):
+                    number, time = wedge.get("number"), start + cursor
+                    if wedge.get("type") == "stop":
+                        assert number in open_wedges, f"bar {measure.get('number')}"
+                        begin, kind = open_wedges.pop(number)
+                        assert begin <= time, f"bar {measure.get('number')}"
+                        pairs.append((begin, time, kind))
+                    else:
+                        assert number not in open_wedges, f"bar {measure.get('number')}"
+                        open_wedges[number] = (time, wedge.get("type"))
+            start += longest
+        assert not open_wedges
+    return sorted(pairs)
+
+
+def test_hairpins():
+    root = convert(FIXTURES / "hairpins.ly")
+    check_timing(root)
+    q = Fraction
+    assert wedges(root) == [
+        (0, q(5, 4), "crescendo"),        # the spacer voice's
+        (1, 10, "diminuendo"),             # the marks voice's, into bar 3
+        (2, q(15, 4), "diminuendo"),
+        (4, q(11, 2), "crescendo"),       # ended by the next hairpin
+        (q(11, 2), 7, "diminuendo"),      # ended by \p
+    ]
