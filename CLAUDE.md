@@ -62,7 +62,8 @@ system or base conda Python: use `.venv/`.
 - The listener writes to `$LILYPORT_EVENTS` (environment), not via `-e` Scheme
   definitions (which depend on the module LilyPond evaluates them in).
 - `-dinclude-settings` files are read last-given first (an include stack).
-- `ly:book-scores` and `ly:book-book-parts` list newest first. A score's
+- `ly:book-scores` and `ly:book-book-parts` list newest first, and
+  `ly:book-scores` holds the book's top-level markups too (filter `ly:score?`). A score's
   output definitions tell `\midi` from `\layout` by `output-def-kind`
   (`is-layout` is unset in a plain `\layout { }`).
 - A note inside a chord keeps its own `~` and fingering in its

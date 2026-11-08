@@ -428,7 +428,9 @@ Dynamics lines between them too, which belong to a staff), and its name."
      ;; LilyPond keeps parts and scores newest first.
      (for-each (lambda (part) (lilyport-queue-headers part scopes))
                (reverse (ly:book-book-parts book)))
-     (let* ((scores (reverse (ly:book-scores book)))
+     ;; A book's scores include its top-level markups (a title page, a
+     ;; note on the piece), which have no music.
+     (let* ((scores (filter ly:score? (reverse (ly:book-scores book))))
             (midi-only (remove lilyport-engraved-score? scores)))
        (for-each
         (lambda (score)

@@ -28,7 +28,8 @@
       (if (not (any (lambda (def) (eq? (ly:output-def-lookup def 'output-def-kind #f) 'midi))
                     (ly:score-output-defs score)))
           (ly:score-add-output-def! score (ly:output-def-clone $defaultmidi))))
-    (ly:book-scores book)))
+    ;; Top-level markups share the list: no music.
+    (filter ly:score? (ly:book-scores book))))
 
 #(let ((handler toplevel-book-handler))
    (set! toplevel-book-handler

@@ -44,7 +44,8 @@ copy theirs too), and LilyPond would stop playing there."
         (if (eq? (unfold-repeats '(volta segno) music) music)
             (lilyport-forget-lengths music)
             (ly:warning "lilyport: a \\repeat at the top of a score: not unfolded"))))
-    (ly:book-scores book)))
+    ;; Top-level markups share the list: no music.
+    (filter ly:score? (ly:book-scores book))))
 
 #(let ((handler toplevel-book-handler))
    (set! toplevel-book-handler

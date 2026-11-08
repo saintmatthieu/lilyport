@@ -58,3 +58,23 @@
        (make-music 'SequentialMusic 'elements '())))
 #(define-public (revert-auto-beam-setting . args)
    (make-music 'SequentialMusic 'elements '()))
+
+%% Before 2.18: unfold-repeats took the music alone, so that old sources
+%% unfold their \midi score's repeats with \applyMusic #unfold-repeats; it
+%% now takes the repeat types first ('() for all). This shadows it in the
+%% source's scope only: LilyPond's own calls still reach its definition.
+#(define-public unfold-repeats
+   (let ((today (module-ref (resolve-module '(lily)) 'unfold-repeats)))
+     (lambda (first . rest)
+       (if (null? rest)
+           (today '() first)
+           (apply today first rest)))))
+
+%% Before 2.13.20, \cresc, \dim, \endcresc and \enddim stood between notes;
+%% they follow a note now, and convert-ly renames the old ones \deprecatedcresc
+%% etc., leaving them to the editor. Old sources mostly wrote them right after
+%% a note, where today's go: they become today's.
+deprecatedcresc = \cresc
+deprecateddim = \dim
+deprecatedendcresc = \endcresc
+deprecatedenddim = \enddim

@@ -64,3 +64,28 @@ def test_header_per_engraved_score():
     assert headers[2]["title"] == "Second" and "piece" not in headers[2]
     # Book parts, in source order.
     assert [headers[3]["title"], headers[4]["title"]] == ["Part 1", "Part 2"]
+
+
+def test_old_unfold_repeats():
+    # \applyMusic #unfold-repeats (one argument, before 2.18) in a \midi score
+    # used to stop LilyPond; \unfoldRepeats beside it still works.
+    events = dump_events(FIXTURES / "apply-unfold-repeats.ly")
+    assert [e["pitch"]["step"] for e in notes(events)] == [0, 1, 2, 3, 4]  # C D E F G, the print score once
+
+
+def test_book_markups_are_not_scores():
+    # Top-level markups (a title page, a note) used to stop LilyPond in the
+    # listener, which took them for scores.
+    events = dump_events(FIXTURES / "book-markup.ly")
+    by_score = {}
+    for n in notes(events):
+        by_score.setdefault(n["score"], []).append(n["pitch"]["step"])
+    assert by_score == {1: [0, 1, 2, 3], 2: [4]}
+
+
+def test_deprecated_cresc():
+    # convert-ly's \deprecatedcresc etc. are unknown to LilyPond itself.
+    events = dump_events(FIXTURES / "deprecated-cresc.ly")
+    spans = [(e["kind"], e["dir"]) for e in events if e["kind"] in ("crescendo", "decrescendo")]
+    # -1 starts, 1 stops (LilyPond's span-direction).
+    assert spans == [("crescendo", -1), ("crescendo", 1), ("decrescendo", -1), ("decrescendo", 1)]
