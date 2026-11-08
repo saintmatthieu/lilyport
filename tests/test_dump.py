@@ -95,3 +95,16 @@ def test_text_markup():
     # \text (until 2.18) used to stop LilyPond: "Not a markup command".
     events = dump_events(FIXTURES / "text-markup.ly")
     assert [n["pitch"]["step"] for n in notes(events)] == [0, 1, 2, 3]
+
+
+def test_markup_override():
+    # Walking the markup for glyphs used to stop LilyPond: map over a pair.
+    events = dump_events(FIXTURES / "markup-override.ly")
+    assert [n["pitch"]["step"] for n in notes(events)] == [0, 1, 2, 3]
+    assert any("dolce" in e.get("text", "") for e in events if e["kind"] == "text")
+
+
+def test_layout_staff_space():
+    # staff-space was unbound in a \layout: LilyPond stopped.
+    events = dump_events(FIXTURES / "layout-staff-space.ly")
+    assert [n["pitch"]["step"] for n in notes(events)] == [0, 1, 2, 3]

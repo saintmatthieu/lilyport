@@ -151,7 +151,10 @@ with \\sustainOn, or a turn with the accidentals of its notes."
      (list (cadr m)))
     ((and (pair? m) (assq (car m) lilyport-accidental-markups))
      (list (cdr (assq (car m) lilyport-accidental-markups))))
-    ((pair? m) (append-map markup-glyphs m))
+    ;; A markup's arguments include pairs that aren't lists, such as an
+    ;; \override's property: (baseline-skip . 1).
+    ((list? m) (append-map markup-glyphs m))
+    ((pair? m) (append (markup-glyphs (car m)) (markup-glyphs (cdr m))))
     (else '())))
 
 #(define lilyport-note-symbols #("𝅝" "𝅗𝅥" "♩" "♪" "𝅘𝅥𝅯" "𝅘𝅥𝅰"))

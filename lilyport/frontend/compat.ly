@@ -84,3 +84,10 @@ deprecatedenddim = \enddim
 %% markups: (markup #:dynamic "p" #:text #:italic "dolce").
 #(define-markup-command (text layout props arg) (markup?)
    (interpret-markup layout props (make-normal-text-markup arg)))
+
+%% convert-ly rewrites the spacing settings of sources before 2.13.x
+%% (between-system-padding and the like) as expressions in staff-space,
+%% which a score's \layout block doesn't define (a \paper block does, and its
+%% own still wins there). Only page spacing depends on it, and lilyport lays
+%% out no pages: one staff space will do.
+#(define staff-space 1)
