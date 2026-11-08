@@ -78,3 +78,9 @@ deprecatedcresc = \cresc
 deprecateddim = \dim
 deprecatedendcresc = \endcresc
 deprecatedenddim = \enddim
+
+%% Until 2.18: the \text markup command (a text font rather than the music
+%% font), gone since; \normal-text is today's. Sources use it in Scheme
+%% markups: (markup #:dynamic "p" #:text #:italic "dolce").
+#(define-markup-command (text layout props arg) (markup?)
+   (interpret-markup layout props (make-normal-text-markup arg)))

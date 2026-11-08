@@ -89,3 +89,9 @@ def test_deprecated_cresc():
     spans = [(e["kind"], e["dir"]) for e in events if e["kind"] in ("crescendo", "decrescendo")]
     # -1 starts, 1 stops (LilyPond's span-direction).
     assert spans == [("crescendo", -1), ("crescendo", 1), ("decrescendo", -1), ("decrescendo", 1)]
+
+
+def test_text_markup():
+    # \text (until 2.18) used to stop LilyPond: "Not a markup command".
+    events = dump_events(FIXTURES / "text-markup.ly")
+    assert [n["pitch"]["step"] for n in notes(events)] == [0, 1, 2, 3]
