@@ -62,6 +62,29 @@ def check_timing(root):
                 measure.get("number")
 
 
+def check_ids(root):
+    """Every pitched note has an id, and no two the same."""
+    pitched = [n for n in root.iter("note") if n.find("pitch") is not None]
+    ids = [n.get("id") for n in pitched]
+    assert None not in ids
+    assert len(set(ids)) == len(ids)
+    assert all(n.get("id") is None for n in root.iter("note") if n.find("rest") is not None)
+
+
+def test_note_ids():
+    root = convert(FIXTURES / "scaled-and-after-grace.ly")
+    check_ids(root)
+    first = notes(measures(root)[0])
+    assert [n.get("id") for n in first[:2]] == ["n1-0_1-A4", "n1-1_12-B4"]
+    # The \afterGrace notes keep the time LilyPond gave them, 3/4 into the F
+    # (1/2 + 3/4 * 3/8 = 25/32), though written before the G.
+    graces = [n.get("id") for n in root.iter("note") if n.find("grace") is not None]
+    assert graces == ["n1-25_32-g1_8-E5", "n1-25_32-g1_16-F5"]
+    # The same in every export.
+    assert [n.get("id") for n in root.iter("note")] \
+        == [n.get("id") for n in convert(FIXTURES / "scaled-and-after-grace.ly").iter("note")]
+
+
 def test_two_bars():
     root = convert(FIXTURES / "two-bars.ly")
     check_timing(root)
@@ -153,6 +176,7 @@ def test_mutopia(piece):
     events = dump_events(ly)
     root = musicxml.to_element(assemble(events))
     check_timing(root)
+    check_ids(root)
     pitches = sum(1 for e in events if e["kind"] == "note")
     assert len(root.findall("part/measure/note/pitch")) == pitches
     if piece == "moonlight1-a4":

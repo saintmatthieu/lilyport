@@ -287,7 +287,7 @@ class _PartWriter:
 
     def note(self, element, chord, note, index, measure):
         duration = chord.duration
-        xml = ET.SubElement(element, "note")
+        xml = ET.SubElement(element, "note", **({"id": note.id} if note and note.id else {}))
         if chord.grace:
             ET.SubElement(xml, "grace")
         if index > 0:

@@ -189,6 +189,12 @@ musescore.com) — the writer must:
   `<dashes>` in the same `<direction>` becomes one dashed line with the dashes'
   extent (fork fix, 2026-10-21). So a LilyPond `\cresc` text span should be
   written as words + dashes; a hairpin as a `<wedge>`.
+- **Give every note its id.** Each pitched `<note>` has an `id` (see
+  `assemble.note_id`: staff, LilyPond's time, spelled pitch, e.g.
+  `n1-37_8-Eb5`), the same in every export of the same source. The fork's
+  importer keeps it on the note (`Note::sourceId`, saved in `.mscz` files
+  too), so files about a score, e.g. a performance aligned to a recording,
+  can name its notes without matching times, which the importer rounds.
 - **Expect Debug builds to abort** on the importer's failed assertions
   (`IF_ASSERT_FAILED` calls `assert()`); Release builds only log them, and
   import the score wrong. Orchestrion's score shelf loads every score it lists
@@ -393,6 +399,8 @@ lilyport/
   Debug build; `\cresc` as words + dashes (also a hairpin drawn as text,
   `decrescendoSpanner = #'text`: Chopin Op. 28 No. 4's "stretto", now a
   wedge); dynamics in markups (`\markup \dynamic pp`) are written as words.
+- **Done:** note ids (`<note id>`, unique, stable across exports;
+  checked imported and saved in Orchestrion's Debug build, 2026-11-20).
 - **Done:** repeats: `\repeat volta` and `repeatCommands` as repeat bar
   lines (`times` when played more than twice) and `<ending>` brackets, bars
   divided at repeat signs inside them. Checked against LilyPond's unfolded

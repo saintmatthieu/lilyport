@@ -35,6 +35,10 @@ class Note:
     tie_start: bool = False
     tie_stop: bool = False
     fingerings: list[str] = field(default_factory=list)  # of this note in a chord
+    # Unique in the score and the same in every export of the same source,
+    # whatever lilyport makes of the note (see assemble.note_id): what files
+    # about the score, e.g. a performance aligned to it, refer to it by.
+    id: str = ""
 
 
 @dataclass

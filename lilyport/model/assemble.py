@@ -86,6 +86,25 @@ def _pitch(p):
     return Pitch(p["step"], alter, p["octave"] + 4)
 
 
+def note_id(staff, time, pitch):
+    """A note's id: the staff LilyPond put it on (numbered in order of
+    appearance), the time LilyPond gave it (before lilyport moves anything,
+    e.g. an \\afterGrace) and its spelled pitch: "n2-37_8-Eb5" is E-flat 5,
+    37/8 of a whole note into the score on the second staff; a grace note's
+    time has its grace part too, "n1-3_4-g1_16-F5" a sixteenth before 3/4.
+    A valid XML ID, exact (no rounding), and independent of voices."""
+    main, grace = time
+    text = f"n{staff}-{main.numerator}_{main.denominator}"
+    if grace:
+        text += f"-g{-grace.numerator}_{grace.denominator}"
+    alter = pitch.alter
+    if alter.denominator == 1:
+        accidental = "s" * int(alter) if alter > 0 else "b" * int(-alter)
+    else:
+        accidental = f"a{alter.numerator}_{alter.denominator}".replace("-", "m")
+    return f"{text}-{'CDEFGAB'[pitch.step]}{accidental}{pitch.octave}"
+
+
 def _duration(d):
     return Duration(d["log"], d["dots"], Fraction(*d["factor"]))
 
@@ -240,8 +259,15 @@ class _Builder:
 
     # Notes, chords and rests: the notes of one voice at one time are a chord.
 
+    def _unique_id(self, id):
+        """The same note twice (two voices in unison): numbered in the order
+        LilyPond played them, "...-Eb5", "...-Eb5-2"."""
+        count = self.id_counts[id] = self.id_counts.get(id, 0) + 1
+        return id if count == 1 else f"{id}-{count}"
+
     def _chords(self):
         self.chords = {}  # (voice id, time) -> Chord
+        self.id_counts = {}
         self.tied = set()  # (voice id, time, pitch) of notes tied to the next
         self.hidden = defaultdict(list)  # (voice id, time) -> notes drawn invisibly
         for e in self.events:
@@ -277,7 +303,8 @@ class _Builder:
                           "written with the first's")
             if kind == "note":
                 pitch = _pitch(e["pitch"])
-                chord.notes.append(Note(pitch, fingerings=[str(f) for f in e.get("fingers", [])]))
+                chord.notes.append(Note(pitch, fingerings=[str(f) for f in e.get("fingers", [])],
+                                        id=self._unique_id(note_id(e["staff"], time, pitch))))
                 if e.get("tie"):
                     self.tied.add((e["voice"], time, pitch))
                 if e.get("repeat_tie"):
