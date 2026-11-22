@@ -438,3 +438,34 @@ def test_hairpins():
         (4, q(11, 2), "crescendo"),       # ended by the next hairpin
         (q(11, 2), 7, "diminuendo"),      # ended by \p
     ]
+
+
+def test_part_combine():
+    root = convert(FIXTURES / "part-combine.ly")
+    check_timing(root)
+    divisions = int(root.find("part/measure/attributes/divisions").text)
+
+    def sounding(measure):
+        """(onset in quarters, pitch) of the measure's notes."""
+        found, cursor, onset = set(), 0, 0
+        for element in measure:
+            duration = Fraction(int(element.findtext("duration") or 0), divisions)
+            if element.tag == "backup":
+                cursor -= duration
+            elif element.tag == "forward":
+                cursor += duration
+            elif element.tag == "note":
+                if element.find("chord") is None:
+                    onset, cursor = cursor, cursor + duration
+                if element.find("pitch") is not None:
+                    found.add((onset, element.findtext("pitch/step")
+                               + element.findtext("pitch/octave")))
+        return found
+
+    first, second, third, fourth = measures(root)
+    assert sounding(first) == {(0, "E5"), (0, "C5"), (1, "D5"), (1, "B4"), (2, "C5"),
+                               (Fraction(5, 2), "D5"), (2, "A4"), (3, "E5"), (3, "C5")}
+    assert sounding(second) == {(0, "G5"), (0, "E5"), (2, "G4")}
+    assert sounding(third) == set()
+    assert third.find("note/rest") is not None
+    assert sounding(fourth) == {(0, "C5")}

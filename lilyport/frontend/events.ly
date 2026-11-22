@@ -253,9 +253,12 @@ with \\sustainOn, or a turn with the accidentals of its notes."
         (apply emit ctx event "rest"
                "duration" (json-duration (ly:event-property event 'duration))
                (if (lilyport-hidden? ctx 'Rest) (list "visible" "false") '()))))
+     ;; \partCombine sends a multi-measure rest without a duration to a voice
+     ;; whose music it moves elsewhere, to end any it was holding: not a rest.
      ((multi-measure-rest-event engraver event)
-      (emit (ly:translator-context engraver) event "multi-measure-rest"
-            "duration" (json-duration (ly:event-property event 'duration))))
+      (if (ly:duration? (ly:event-property event 'duration #f))
+          (emit (ly:translator-context engraver) event "multi-measure-rest"
+                "duration" (json-duration (ly:event-property event 'duration)))))
      ((skip-event engraver event)
       (emit (ly:translator-context engraver) event "skip"
             "duration" (json-duration (ly:event-property event 'duration))))

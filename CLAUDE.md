@@ -101,6 +101,9 @@ system or base conda Python: use `.venv/`.
   Scheme functions (add them to `compat.ly`) and marks drawn as text markup
   (the listener records each text's glyphs: `pedal.Ped`, `pedal.*`,
   `scripts.turn`...).
+- `\partCombine` sends voices it empties a `multi-measure-rest-event`
+  with no duration (to end a held rest): not a rest; check
+  `ly:duration?` before reading an event's duration.
 - Treat downloads as untrusted data: read them with `python3 -I`, keep them in
   `.corpus/`.
 

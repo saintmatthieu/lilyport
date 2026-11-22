@@ -433,6 +433,14 @@ lilyport/
   before it starts. Of the 155 Rolls work pieces that convert, 32 paired
   wrongly before, none after (MuseScore's pairing replayed by
   `tests/test_musicxml.py`'s `wedges`).
+- **Done (found by Rolls' Hall of the Mountain King, Mutopia 1888):**
+  `\partCombine`. Its iterator sends a multi-measure rest without a
+  duration to a voice whose music it moves to another (shared or solo), to
+  end any rest that voice held; the listener crashed on it
+  (`ly:duration-factor`). It is no rest, and is skipped. The combined
+  music comes through as LilyPond draws it: chords where the two parts'
+  rhythms agree, two voices where they don't, one note for a unison
+  (fixture `part-combine.ly`).
 - **Known differences in the MIDI check:** a tie into a later ending is a
   stop alone, which Verovio strikes again (The Entertainer, bar 92). Two
   voices overlapping on one
